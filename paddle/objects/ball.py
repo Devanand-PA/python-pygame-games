@@ -68,13 +68,14 @@ class Ball :
 
     def update(self) :
         if not ((self.hitbox.x > 0) and self.hitbox.x < (self.game.screen_size[0] - self.hitbox.width) ) :
-            self.vel[0] = -1*self.vel[0]
+            self.vel[0] = -1*self.vel[0] + random.randint(-1,1)
 
         self.delta_t = self.game.clock.tick(60) / 1000.0  # seconds
 
 
         if self.hitbox.colliderect(self.parent_scene.paddle.hitbox) :
-            self.vel[1] = -1 * abs(self.vel[1])
+            self.vel[1] = -1 * abs(self.vel[1]) + random.randint(-1,1)
+            self.vel[0] += random.randint(-1,1)
         
         if self.gravity_enabled :
             self.    delta_t = self.game.clock.tick(60) / 1000.0  # secondshandle_gravity()

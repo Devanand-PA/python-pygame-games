@@ -170,6 +170,7 @@ imports:
  &#8226;   <a href="#re._parser">re._parser</a>
  &#8226;   <a href="#reprlib">reprlib</a>
  &#8226;   <a href="#scenes.options_screen">scenes.options_screen</a>
+ &#8226;   <a href="#scenes.scene_1">scenes.scene_1</a>
  &#8226;   <a href="#scenes.welcome_screen">scenes.welcome_screen</a>
  &#8226;   <a href="#sre_compile">sre_compile</a>
  &#8226;   <a href="#sre_constants">sre_constants</a>
@@ -4956,6 +4957,7 @@ imports:
 imported by:
     <a href="#scenes.difficulty_chooser">scenes.difficulty_chooser</a>
  &#8226;   <a href="#scenes.options_screen">scenes.options_screen</a>
+ &#8226;   <a href="#scenes.settings_menu">scenes.settings_menu</a>
  &#8226;   <a href="#scenes.welcome_screen">scenes.welcome_screen</a>
 
   </div>
@@ -5998,6 +6000,7 @@ imported by:
 <span class="moduletype">Package</span>  <div class="import">
 imported by:
     <a href="#objects.ball">objects.ball</a>
+ &#8226;   <a href="#objects.breakable_blocks">objects.breakable_blocks</a>
  &#8226;   <a href="#objects.paddle">objects.paddle</a>
 
   </div>
@@ -6007,6 +6010,24 @@ imported by:
 <div class="node">
   <a name="objects.ball"></a>
   <a target="code" href="/home/devanandpa/sourced/python-pygame-games/paddle/objects/ball.py" type="text/plain"><tt>objects.ball</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#objects">objects</a>
+ &#8226;   <a href="#pygame">pygame</a>
+ &#8226;   <a href="#random">random</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#scenes.scene_1">scenes.scene_1</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="objects.breakable_blocks"></a>
+  <a target="code" href="/home/devanandpa/sourced/python-pygame-games/paddle/objects/breakable_blocks.py" type="text/plain"><tt>objects.breakable_blocks</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#objects">objects</a>
@@ -6439,6 +6460,7 @@ imported by:
     <a href="#gui_utils.gui_elements">gui_utils.gui_elements</a>
  &#8226;   <a href="#main.py">main.py</a>
  &#8226;   <a href="#objects.ball">objects.ball</a>
+ &#8226;   <a href="#objects.breakable_blocks">objects.breakable_blocks</a>
  &#8226;   <a href="#objects.paddle">objects.paddle</a>
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#pygame._common">pygame._common</a>
@@ -6484,6 +6506,7 @@ imported by:
  &#8226;   <a href="#scenes.difficulty_chooser">scenes.difficulty_chooser</a>
  &#8226;   <a href="#scenes.options_screen">scenes.options_screen</a>
  &#8226;   <a href="#scenes.scene_1">scenes.scene_1</a>
+ &#8226;   <a href="#scenes.settings_menu">scenes.settings_menu</a>
  &#8226;   <a href="#scenes.welcome_screen">scenes.welcome_screen</a>
 
   </div>
@@ -7318,6 +7341,8 @@ imported by:
     <a href="#email.generator">email.generator</a>
  &#8226;   <a href="#email.utils">email.utils</a>
  &#8226;   <a href="#objects.ball">objects.ball</a>
+ &#8226;   <a href="#objects.breakable_blocks">objects.breakable_blocks</a>
+ &#8226;   <a href="#scenes.scene_1">scenes.scene_1</a>
  &#8226;   <a href="#statistics">statistics</a>
  &#8226;   <a href="#tempfile">tempfile</a>
 
@@ -7524,6 +7549,7 @@ imported by:
     <a href="#scenes.difficulty_chooser">scenes.difficulty_chooser</a>
  &#8226;   <a href="#scenes.options_screen">scenes.options_screen</a>
  &#8226;   <a href="#scenes.scene_1">scenes.scene_1</a>
+ &#8226;   <a href="#scenes.settings_menu">scenes.settings_menu</a>
  &#8226;   <a href="#scenes.welcome_screen">scenes.welcome_screen</a>
 
   </div>
@@ -7557,6 +7583,7 @@ imports:
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#scenes">scenes</a>
  &#8226;   <a href="#scenes.scene_1">scenes.scene_1</a>
+ &#8226;   <a href="#scenes.settings_menu">scenes.settings_menu</a>
 
   </div>
   <div class="import">
@@ -7575,12 +7602,34 @@ imported by:
 imports:
     <a href="#json">json</a>
  &#8226;   <a href="#objects.ball">objects.ball</a>
+ &#8226;   <a href="#objects.breakable_blocks">objects.breakable_blocks</a>
  &#8226;   <a href="#objects.paddle">objects.paddle</a>
  &#8226;   <a href="#pygame">pygame</a>
+ &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#scenes">scenes</a>
  &#8226;   <a href="#scenes.difficulty_chooser">scenes.difficulty_chooser</a>
  &#8226;   <a href="#scenes.options_screen">scenes.options_screen</a>
  &#8226;   <a href="#scenes.welcome_screen">scenes.welcome_screen</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#main.py">main.py</a>
+ &#8226;   <a href="#scenes.options_screen">scenes.options_screen</a>
+ &#8226;   <a href="#scenes.welcome_screen">scenes.welcome_screen</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="scenes.settings_menu"></a>
+  <a target="code" href="/home/devanandpa/sourced/python-pygame-games/paddle/scenes/settings_menu.py" type="text/plain"><tt>scenes.settings_menu</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#gui_utils.gui_elements">gui_utils.gui_elements</a>
+ &#8226;   <a href="#pygame">pygame</a>
+ &#8226;   <a href="#scenes">scenes</a>
 
   </div>
   <div class="import">
@@ -7601,6 +7650,7 @@ imports:
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#scenes">scenes</a>
  &#8226;   <a href="#scenes.scene_1">scenes.scene_1</a>
+ &#8226;   <a href="#scenes.settings_menu">scenes.settings_menu</a>
 
   </div>
   <div class="import">

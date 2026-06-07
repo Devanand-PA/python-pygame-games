@@ -25,6 +25,35 @@ class Scene :
         if self.game.difficulty_level :
                 self.initialization_stage = 1
 
+        self.breakable_blocks = []
+        from objects.breakable_blocks import Block
+        self.breakable_blocks.append(Block(self.game, self))
+
+
+    def update_breakable_blocks(self) :
+        import random
+        coin_toss = random.randint(0,10**4)
+        if (coin_toss > 9875) and ( len(self.breakable_blocks) < 15 ):
+            from objects.breakable_blocks import Block
+            self.breakable_blocks.append(Block(self.game, self))
+        for block in range(len(self.breakable_blocks) -1 , -1, -1) :
+            for ball in self.balls :
+                if self.breakable_blocks[block].hitbox.colliderect(ball.hitbox) :
+                    self.breakable_blocks[block].broken = True
+                if  self.breakable_blocks[block].broken :
+                    self.breakable_blocks.pop(block)
+                    break
+
+
+            
+    
+    def update_game(self) :
+                ##============ Game Loop========
+                for ball in self.balls :
+                    ball.update()
+                self.paddle.update()
+                self.update_breakable_blocks()
+                #=================================
 
     def update(self) :
         if self.initialization_stage == 1 :
@@ -37,23 +66,24 @@ class Scene :
             self.game.scene = Scene(self.game)
         else :
             if not self.scene_paused :
-                for ball in self.balls :
-                    ball.update()
-                self.paddle.update()
+                self.update_game()
+
 
         for ball_no in range(len(self.balls)) :
             if self.balls[ball_no].hitbox.y > ( self.game.screen_size[0] ) :
                 self.balls.pop(ball_no)
 
-        if ( not self.scene_paused ) and (not self.balls) :
-            self.options_screen_enabled = True
-            self.scene_paused = True
-            self.difficulty_chooser.enabled = False
 
         if self.paddle.hitbox.x > self.game.screen_size[0] - self.paddle.hitbox.width :
                 self.paddle.hitbox.x = self.game.screen_size[0] - self.paddle.hitbox.width
     
         self.paddle.hitbox.y = self.game.screen_size[1] - (1.5*self.paddle.hitbox.height)
+        if ( not self.scene_paused ) and (not self.balls) :
+            self.options_screen_enabled = True
+            self.scene_paused = True
+            self.difficulty_chooser.enabled = False
+
+
 
     def default_handle_event(self,event) :
         if event.type == pygame.KEYDOWN :
@@ -72,7 +102,7 @@ class Scene :
         if self.difficulty_chooser.enabled :
             self.difficulty_chooser.handle_event(event)
 
-        elif self.options_screen_enabled :
+        if self.options_screen_enabled :
             self.options_screen.handle_event(event)
 
         else :
@@ -132,6 +162,9 @@ class Scene :
         self.paddle.draw()
         for ball in self.balls :
             ball.draw()
+
+        for block in self.breakable_blocks :
+            block.draw()
         self.snapshot = self.game.screen.copy()
 
 
