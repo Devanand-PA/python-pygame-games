@@ -11,13 +11,14 @@ class Ball :
                         )
         self.parent_scene = parent_scene
         self.hitbox.center = (random.randint(0, self.game.screen_size[0]) , 0) 
-        self.color = (200,0,0)
+        self.color = (200,200,200)
 
         print(self.game.difficulty_level)
 
 
         self.delta_t = self.game.clock.tick(60) / 1000.0  # seconds
         self.initialize_ball()
+        self.fireball = False
 
     def normalize_speed(self) :
         self.vel = [ (self.speed*self.vel[0])/( ((self.vel[1]**2)  + (self.vel[0]**2))**(1/2) ) ,
@@ -67,8 +68,11 @@ class Ball :
 
 
     def update(self) :
-        if not ((self.hitbox.x > 0) and self.hitbox.x < (self.game.screen_size[0] - self.hitbox.width) ) :
-            self.vel[0] = -1*self.vel[0] + random.randint(-1,1)
+        if (self.hitbox.x < 0) :
+            self.vel[0] = abs(self.vel[0] )
+
+        elif (self.hitbox.x > (self.game.screen_size[0] - self.hitbox.width) ) :
+            self.vel[0] = -1*abs(self.vel[0] )
 
         self.delta_t = self.game.clock.tick(60) / 1000.0  # seconds
 
@@ -78,11 +82,15 @@ class Ball :
             self.vel[0] += random.randint(-1,1)
         
         if self.gravity_enabled :
-            self.    delta_t = self.game.clock.tick(60) / 1000.0  # secondshandle_gravity()
+            self.delta_t = self.game.clock.tick(60) / 1000.0  # handle_gravity()
+            self.handle_gravity()
         
         if self.hitbox.y < 0 :
             self.vel[1] = abs(self.vel[1])
 
+        if self.game.difficulty_level == "Indian" :
+                self.vel[0] += random.randint(-10,10)
+                self.vel[1] += random.randint(-10,10)
         self.normalize_speed()
         self.hitbox.x += self.vel[0]
         self.hitbox.y += self.vel[1]

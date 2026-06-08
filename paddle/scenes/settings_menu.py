@@ -76,20 +76,24 @@ class Scene :
             if (self.toggle_fullscreen_button.sel == True) and (event.key == pygame.K_RETURN):
                 self.game.FULLSCREEN = not self.game.FULLSCREEN
                 if  self.game.FULLSCREEN :
+                            self.game.screen_size = ( self.game.screen_info.current_w , self.game.screen_info.current_h )
                             self.game.screen = pygame.display.set_mode(
                                     self.game.screen_size,
                                         pygame.FULLSCREEN
                                             )   
-                            self.game.screen_info = pygame.display.Info()
-                            self.game.screen_size = ( self.game.screen_info.current_w , self.game.screen_info.current_h )
                 else :
-                            self.game.screen = pygame.display.set_mode(
-                                    (1280,720),
-                                            )   
                             self.game.screen_size = ( 1280, 720)
+                            self.game.screen = pygame.display.set_mode(
+                                    self.game.screen_size,
+                                            )   
                 self.update_resolution()
                 self.game.update_resolution()
                 self.parent_scene.update_resolution()
+                if self.game.scene.scene_type == "Game" :
+                    del self.game.scene
+                    from scenes.scene_1 import Scene
+                    self.game.scene = Scene(self.game)
+                    self.game.scene.scene_paused = False
                             
 
 

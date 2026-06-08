@@ -26,6 +26,12 @@ class Paddle :
             if self.hitbox.x < 0 :
                 self.hitbox.x = 0
 
+        if self.game.difficulty_level == "Indian" :
+            import random
+            cointoss = random.randint(0,1000)
+            if cointoss > 990 :
+                self.hitbox.x = random.randint(0,self.game.screen_size[0] - self.hitbox.width)
+
     
 
     def draw(self) :

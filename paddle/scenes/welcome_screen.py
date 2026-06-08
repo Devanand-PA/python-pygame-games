@@ -4,6 +4,7 @@ from gui_utils.gui_elements import Button
 class Scene :
     def __init__(self, game):
         self.game = game
+        self.scene_type = "Menu"
         self.welcomeTextRaw = "__Bad Paddle__"
         self.welcome_text = self.game.title_font.render(
                 self.welcomeTextRaw,

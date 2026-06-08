@@ -4,6 +4,7 @@ class Scene :
     def __init__(self,game) :
         self.game = game
         self.scene_name = "scenes.scene_1"
+        self.scene_type = "Game"
         from scenes.options_screen import Scene as options_screen
         self.options_screen = options_screen(self,self.game)
         from scenes.difficulty_chooser import Scene as difficulty_chooser_scene
@@ -29,6 +30,37 @@ class Scene :
         from objects.breakable_blocks import Block
         self.breakable_blocks.append(Block(self.game, self))
 
+    def handle_collisions(self,ball,block) :
+                    #============ Block Collision =========================
+                    edges = [   [ self.breakable_blocks[block].hitbox.x , 0 ] ,
+                                [ 0 , self.breakable_blocks[block].hitbox.y ] , 
+                                [ self.breakable_blocks[block].hitbox.x + self.breakable_blocks[block].hitbox.width  , 0],
+                                [ 0, self.breakable_blocks[block].hitbox.y + self.breakable_blocks[block].hitbox.height ]  ]
+                    
+                    curr_pos = [ ball.hitbox.x , ball.hitbox.y ]
+                    d_list = []
+
+
+                    for edge in edges :
+                        dist = 0
+                        for comp in range(len(edge)) :
+                            if edge[comp] :
+                                dist = abs(curr_pos[comp] - (ball.vel[comp]// 3) - edge[comp])
+
+                                d_list.append({
+                                "dx" : dist,
+                                "invert" : [comp, 0]
+                                    })
+
+                    k = 0
+                    for d in range(len(d_list)) :
+                        if d_list[d]["dx"] < d_list[k]["dx"] :
+                            k = d
+                    min_d = d_list[k]
+                    min_d["invert"][1] = int(k>1) or -1
+                    ball.vel[min_d["invert"][0]] = min_d["invert"][1]* abs(ball.vel[min_d["invert"][0]])
+                    #========================================================
+
 
     def update_breakable_blocks(self) :
         import random
@@ -40,6 +72,10 @@ class Scene :
             for ball in self.balls :
                 if self.breakable_blocks[block].hitbox.colliderect(ball.hitbox) :
                     self.breakable_blocks[block].broken = True
+                    if not ball.fireball :
+                        self.handle_collisions(ball,block)
+                    
+
                 if  self.breakable_blocks[block].broken :
                     self.breakable_blocks.pop(block)
                     break
@@ -77,7 +113,6 @@ class Scene :
         if self.paddle.hitbox.x > self.game.screen_size[0] - self.paddle.hitbox.width :
                 self.paddle.hitbox.x = self.game.screen_size[0] - self.paddle.hitbox.width
     
-        self.paddle.hitbox.y = self.game.screen_size[1] - (1.5*self.paddle.hitbox.height)
         if ( not self.scene_paused ) and (not self.balls) :
             self.options_screen_enabled = True
             self.scene_paused = True
