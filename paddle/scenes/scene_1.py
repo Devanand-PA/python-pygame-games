@@ -1,4 +1,5 @@
 import pygame
+import time
 
 class Scene :
     def __init__(self,game) :
@@ -21,6 +22,8 @@ class Scene :
         self.balls.append( Ball(game,self) )
         self.scene_paused = True
         self.snapshot = pygame.Surface(self.game.screen_size)
+        self.buffs = []
+        self.active_buffs = []
 
         self.initialization_stage = 0
         if self.game.difficulty_level :
@@ -29,6 +32,33 @@ class Scene :
         self.breakable_blocks = []
         from objects.breakable_blocks import Block
         self.breakable_blocks.append(Block(self.game, self))
+
+    def handle_buffs(self) :
+        import random
+        coin_toss = random.randint(1,100000)
+        if (coin_toss > 99500) and ( len(self.buffs) < 2 ):
+            from objects.buffs import Buff
+            self.buffs.append(Buff(self.game, self))
+            coin_toss = 0
+
+        for buff in range(len(self.buffs)- 1 ,-1 ,-1) :
+            if self.buffs[buff].hitbox.colliderect(self.paddle.hitbox) :
+                caught_buff = self.buffs.pop(buff)
+                if caught_buff.buff == "Extraball" :
+                    from objects.ball import Ball
+                    self.balls.append( Ball(self.game,self) )
+                elif caught_buff.buff == "Fireball" :
+                    for ball in self.balls :
+                        ball.fireball = True
+                        ball.fireball_timer = time.perf_counter()
+                        ball.color = (250,150,0)
+
+            elif self.buffs[buff].hitbox.y > (self.game.screen_size[1]) :
+                self.buffs.pop(buff)
+
+
+
+        
 
     def handle_collisions(self,ball,block) :
                     #============ Block Collision =========================
@@ -87,8 +117,11 @@ class Scene :
                 ##============ Game Loop========
                 for ball in self.balls :
                     ball.update()
+                for buff in self.buffs :
+                    buff.update()
                 self.paddle.update()
                 self.update_breakable_blocks()
+                self.handle_buffs()
                 #=================================
 
     def update(self) :
@@ -105,7 +138,7 @@ class Scene :
                 self.update_game()
 
 
-        for ball_no in range(len(self.balls)) :
+        for ball_no in range(len(self.balls ) -1, -1 , -1) :
             if self.balls[ball_no].hitbox.y > ( self.game.screen_size[0] ) :
                 self.balls.pop(ball_no)
 
@@ -200,6 +233,9 @@ class Scene :
 
         for block in self.breakable_blocks :
             block.draw()
+
+        for buff in self.buffs :
+            buff.draw()
         self.snapshot = self.game.screen.copy()
 
 

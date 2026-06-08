@@ -19,6 +19,7 @@ class Ball :
         self.delta_t = self.game.clock.tick(60) / 1000.0  # seconds
         self.initialize_ball()
         self.fireball = False
+        self.fireball_timer = 0
 
     def normalize_speed(self) :
         self.vel = [ (self.speed*self.vel[0])/( ((self.vel[1]**2)  + (self.vel[0]**2))**(1/2) ) ,
@@ -94,6 +95,13 @@ class Ball :
         self.normalize_speed()
         self.hitbox.x += self.vel[0]
         self.hitbox.y += self.vel[1]
+
+        if self.fireball_timer > 0 :
+            import time
+            if ( self.fireball_timer - time.perf_counter() ) > 10 :
+                self.fireball = False
+                self.fireball_timer = 0
+                self.color = (200,200,200)
         
 
     
