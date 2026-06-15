@@ -43,38 +43,38 @@ class Ball :
         pass
 
     def handle_gravity(self) :
-        self.vel[1] += self.gravity * self.delta_t # gravity
+        self.vel[1] += float(self.gravity * self.delta_t) # gravity
 
     def initialize_ball(self) :
         if self.game.difficulty_level in [None, "Easy"] :
             self.vel = [random.randint(-10,10), random.randint(1,10)]
-            self.speed = 20
+            self.speed = 500
             self.normalize_speed()
-            self.gravity = 4
+            self.gravity = 40
 
         elif self.game.difficulty_level == "Normal" :
             self.vel = [random.randint(-20,20), random.randint(1,20)]
-            self.speed = 25
+            self.speed = 750
             self.normalize_speed()
-            self.gravity = 9.8
+            self.gravity = 98
 
         elif self.game.difficulty_level == "Hard" :
             self.vel = [random.randint(-30,30), random.randint(1,30)]
-            self.speed = 30
+            self.speed = 1000
             self.normalize_speed()
-            self.gravity = 9.8
+            self.gravity = 98
 
         elif self.game.difficulty_level == "Asian" :
             self.vel = [random.randint(-50,50), random.randint(1,50)]
-            self.speed = 30
+            self.speed = 1250
             self.normalize_speed()
-            self.gravity = 30
+            self.gravity = 300
 
         elif self.game.difficulty_level == "Indian" :
             self.vel = [random.randint(-60,60), random.randint(1,60)]
-            self.speed = 40
+            self.speed = 1500
             self.normalize_speed()
-            self.gravity = 40
+            self.gravity = 400
 
 
     def update(self,dt) :
@@ -103,8 +103,8 @@ class Ball :
 
         if not self.gravity_enabled :
             self.normalize_speed()
-        self.hitbox.x += self.vel[0]
-        self.hitbox.y += self.vel[1]
+        self.hitbox.x += self.vel[0]*self.delta_t
+        self.hitbox.y += self.vel[1]*self.delta_t
 
         if self.fireball_timer > 0 :
             import time
