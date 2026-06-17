@@ -10,7 +10,7 @@ SCREEN_TITLE = "Basic Arcade Game"
 class MyGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-        from scenes.welcome_scene import Scene
+        from menus.welcome_screen import Scene
         self.scene = Scene(self)
 
 
