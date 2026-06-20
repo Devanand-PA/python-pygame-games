@@ -16,6 +16,9 @@ class namecallableList:
         def __len__(self):
             return len(self._list)
 
+        def append(self,item) :
+            self._list.append(item)
+            self._dict[item["name"]] = item
 
 class Button :
     def __init__ (self, 

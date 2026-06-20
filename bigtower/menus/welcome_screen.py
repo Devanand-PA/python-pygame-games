@@ -98,9 +98,8 @@ class Scene() :
                 self.game.running = False
     
             elif (self.mainboxitems["Start Button"]["item"].sel) and (event.key == pygame.K_RETURN):
-                pass
-                # from scenes.scene_1 import Scene
-                # self.game.scene = Scene(self.game)
+                from menus.career_menu import Scene
+                self.game.scene = Scene(self.game)
 
             elif (self.mainboxitems["Load Button"]["item"].sel) and (event.key == pygame.K_RETURN):
                 pass
