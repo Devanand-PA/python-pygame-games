@@ -8,6 +8,8 @@ shifting the base to pygame from arcade
 # TODO :
 
 [ ] Make the layout for the career screen (options on the left, campaigns on the right)
+    [ ] Options are : (graphics, back to main menu)
+
 [ ] Make the campaign screen (campaigns levels on the left, upgrades on the right)
 [ ] Figure out how to get mouse click to work on the menus
 [ ] Make the options menu (add a recursive stack for layered menus)

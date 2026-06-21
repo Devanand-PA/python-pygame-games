@@ -112,14 +112,14 @@ class Scene() :
                 # self.settings_menu_enabled = True
 
 
-            if event.key == pygame.K_UP :
+            elif event.key == pygame.K_UP :
                 for i in range(len(self.mainboxitems)) :
                     if (self.mainboxitems[i]["item"].sel == True) :
                         self.mainboxitems[i]["item"].sel = False
                         self.mainboxitems[ (i-1) % len(self.mainboxitems)]["item"].sel = True
                         break
     
-            if event.key == pygame.K_DOWN :
+            elif event.key == pygame.K_DOWN :
                 for i in range(len(self.mainboxitems)) :
                     if (self.mainboxitems[i]["item"].sel == True) :
                         self.mainboxitems[i]["item"].sel = False

@@ -29,7 +29,20 @@ class Scene() :
                 "type"  : "Button" ,
                 "text"  : "Campaign Menu",
                 "item"  : None
+                },
+
+            {   "name"  : "Main Menu Button",
+                "type"  : "Button" ,
+                "text"  : "Back to Main Menu",
+                "item"  : None
+                },
+
+            {   "name"  : "Settings Button",
+                "type"  : "Button" ,
+                "text"  : "Settings",
+                "item"  : None
                 }
+
             ])
 
         self.init_buttons()
@@ -87,10 +100,28 @@ class Scene() :
         self.background = pygame.transform.scale(self.background,(self.game.screen_size[0], self.game.screen_size[1]))
 
     def default_handle_event(self,event) :
-        pass
+        if event.type == pygame.KEYDOWN :
+            if (self.mainboxitems["Main Menu Button"]["item"].sel) and (event.key == pygame.K_RETURN):
+                from menus.welcome_screen import Scene
+                self.game.scene = Scene(self.game)
+            
+            elif event.key == pygame.K_UP :
+                for i in range(len(self.mainboxitems)) :
+                    if (self.mainboxitems[i]["item"].sel == True) :
+                        self.mainboxitems[i]["item"].sel = False
+                        self.mainboxitems[ (i-1) % len(self.mainboxitems)]["item"].sel = True
+                        break
+    
+            elif event.key == pygame.K_DOWN :
+                for i in range(len(self.mainboxitems)) :
+                    if (self.mainboxitems[i]["item"].sel == True) :
+                        self.mainboxitems[i]["item"].sel = False
+                        self.mainboxitems[ (i+1) % len(self.mainboxitems)]["item"].sel = True
+                        break
+
 
     def handle_event(self,event) :
-        pass
+        self.default_handle_event(event)
     
     def handle_keypress(self) :
         pass
