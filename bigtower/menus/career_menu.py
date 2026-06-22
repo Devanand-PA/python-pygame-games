@@ -35,12 +35,14 @@ class Scene() :
             {   "name"  : "Main Menu Button",
                 "type"  : "Button" ,
                 "text"  : "Back to Main Menu",
-                "item"  : None
+                "item"  : None, 
+                "function" : self.action_main_menu_button_pressed
                 },
             {   "name"  : "Change User Button",
                 "type"  : "Button" ,
                 "text"  : "Change User",
-                "item"  : None
+                "item"  : None,
+                "function" : self.action_change_user
                 },
 
             {   "name"  : "Settings Button",
@@ -99,6 +101,11 @@ class Scene() :
         for item in self.mainboxitems :
             item["item"].on_draw()
 
+    def action_change_user(self) :
+                    from utils.savestate import list_users
+                    enlisted_users = list_users()
+                    from menus.user_selection import Scene as subscene
+                    self.game.subscenes.append(subscene(self.game,enlisted_users,next_scene="menus.career_menu"))
 
     def action_main_menu_button_pressed(self) :
                 from menus.welcome_screen import Scene

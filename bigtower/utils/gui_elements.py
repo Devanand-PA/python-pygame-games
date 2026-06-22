@@ -1,5 +1,6 @@
 import pygame
 
+
 class namecallableList:
         def __init__(self, buttons):
             self._list = buttons
@@ -46,6 +47,12 @@ class Button :
         else :
             self.font = self.game.default_font
 
+    def on_resize(self) :
+        self.rect = pygame.Rect(self.coords[0],
+                         self.coords[1],
+                         self.size[0],
+                         self.size[1] )
+
 
     def on_draw(self) :
         pygame.draw.rect(self.game.screen,
@@ -64,3 +71,82 @@ class Button :
             self.coords[1] + self.size[1] // 2 ))
             self.game.screen.blit(self.rendered_text,text_rect)
 
+
+
+class InputBox():
+    def __init__(self, game, coords, size,
+                 fgcolor=[(150,150,150),(250,250,250)], bgcolor=[(0,0,0),(0,0,0)], 
+                 sel=True, font=None,font_size=0) :
+        self.coords = coords
+        self.game = game
+        self.cursorpos = 0 # index of where the cursor is in the string
+        self.fgcolor = fgcolor
+        if font or font_size:
+            self.font_size  = font_size or 32
+            self.font = pygame.font.Font(font,self.font_size)
+        else : 
+            self.font = self.game.default_font
+        self.bgcolor = bgcolor
+        self.size = size
+        self.size[1] = self.font.size("Sample Text")[1]
+        self.sel = sel
+        self.full_text = ""
+        self.padding = 5
+        self.display_index = [0, 1]
+        self.rect = pygame.Rect(self.coords[0],
+                         self.coords[1],
+                         self.size[0],
+                         self.size[1] )
+
+    def _set_cursor_from_mouse(self,mouse_x) :
+        pass
+
+
+    def default_handle_event(self,event) :
+        if event.type == pygame.KEYDOWN :
+            if event.key == pygame.K_BACKSPACE :
+                if (self.cursorpos >= 0) and (self.cursorpos < len(self.full_text)):
+                    self.full_text = self.full_text[0:self.cursorpos] + self.full_text[self.cursorpos+1:len(self.full_text)]
+                if self.cursorpos > 0 :
+                    self.cursorpos -= 1
+                    if self.display_index[1] > 0 :
+                        self.display_index[1] -= 1
+                    if (self.cursorpos < (self.display_index[0])) and (self.display_index[0] > 0) :
+                        self.display_index[0] -= 1
+                        self.display_index[1] -= 1
+
+            if event.unicode.isprintable() and (event.unicode != '') :
+                self.full_text = self.full_text[:self.cursorpos] + event.unicode + self.full_text[self.cursorpos:]
+                if self.cursorpos < len(self.full_text) :
+                    self.cursorpos += 1
+                    if self.font.size(self.full_text[self.display_index[0]:self.display_index[1]])[0] < self.rect.width :
+                        self.display_index[1] += 1
+                    elif self.cursorpos > (self.display_index[1] - 1) :
+                        self.display_index[0] += 1
+                        self.display_index[1] += 1
+            print(self.cursorpos,self.display_index,self.full_text,self.font.size(self.full_text[self.display_index[0]:self.display_index[1]])[0])
+
+    def handle_event(self,event) :
+        self.default_handle_event(event)
+
+    def on_draw(self) :
+
+        pygame.draw.rect(self.game.screen,
+                         self.bgcolor[self.sel],
+                         self.rect
+                         )
+
+
+        displayed_text = self.full_text[self.display_index[0]:self.display_index[1]]
+        rendered_text = self.font.render(
+            displayed_text,
+            True,
+            self.fgcolor[self.sel])
+        self.game.screen.blit(rendered_text, self.rect)
+
+        cursor_x = self.rect.x + self.padding + self.font.size(self.full_text[self.display_index[0]:self.cursorpos])[0]
+        if self.sel and ( (pygame.time.get_ticks() % 1500 ) < 1000 ):
+            pygame.draw.line(self.game.screen,self.fgcolor[self.sel],
+                             ( cursor_x  , self.rect.y + 2),
+                             ( cursor_x , self.rect.y + self.size[1] - 2) , 2)
+        

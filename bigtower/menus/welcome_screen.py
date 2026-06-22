@@ -7,6 +7,7 @@ class Scene() :
     def __init__(self,game) :
         self.game = game
         self.background = pygame.image.load("assets/menus/welcom_screen_background.jpg")
+        self.mainboxitems = []
         self.on_resize()
         self.mainbox_color = (10,10,10)
         self.mainbox =  pygame.Rect(
@@ -40,7 +41,7 @@ class Scene() :
                  "name" : "Quit Button",
                  "type" : "Button",
                  "text" : "Quit Game",
-                  "function" : quit
+                  "function" : self.game.on_quit
                  },
                  ])
         self.init_buttons()
@@ -48,12 +49,12 @@ class Scene() :
 
     def init_buttons(self) :
         top_pad = 0
-        button_height = 50
+        self.button_height = 50
         for item in self.mainboxitems :
             if item["type"] == "Button" :
                 item["item"] = Button(self.game,
                                     [self.mainbox.x + 10, self.mainbox.y + 10 + top_pad],
-                                    [self.mainbox_width - 20 , button_height],
+                                    [self.mainbox_width - 20 , self.button_height],
                                     fgcolor=[(0,0,0),(0,0,0)],
                                     bgcolor=[(100,100,0),(200,200,0)],
                                     text=item["text"],
@@ -61,17 +62,18 @@ class Scene() :
                                       )
 
             top_pad += item["item"].size[1] + 10
-        self.mainboxitems['Start Button']["item"].sel = True
+        self.mainboxitems[0]["item"].sel = True
         self.mainbox.height = top_pad + 10
 
     def action_start_button_pressed(self):
-                from utils.savestate import list_users
-                enlisted_users = list_users()
-                from menus.user_selection import Scene as subscene
-                self.game.subscenes.append(subscene(self.game,enlisted_users,next_scene="menus.career_menu"))
                 if self.game.user :
                     from menus.career_menu import Scene
                     self.game.scene = Scene(self.game)
+                else : 
+                    from utils.savestate import list_users
+                    enlisted_users = list_users()
+                    from menus.user_selection import Scene as subscene
+                    self.game.subscenes.append(subscene(self.game,enlisted_users,next_scene="menus.career_menu"))
 
     def on_draw(self) :
         self.game.screen.blit(
@@ -85,7 +87,7 @@ class Scene() :
             self.mainbox,
             )
         
-        for item in self.mainboxitems :
+        for item in self.mainboxitems : 
             item["item"].on_draw()
 
 
@@ -99,6 +101,14 @@ class Scene() :
                 self.mainbox_width,
                 self.mainbox_height
                 )
+
+        top_pad = 0
+        for item in self.mainboxitems :
+            item["item"].coords = [self.mainbox.x + 10, self.mainbox.y + 10 + top_pad],
+            item["item"].size = [self.mainbox_width - 20 , self.button_height]
+            item["item"].on_resize()
+            top_pad += item["item"].size[1] + 10
+        self.mainbox.height = top_pad + 10
 
 
     def default_handle_event(self,event) :

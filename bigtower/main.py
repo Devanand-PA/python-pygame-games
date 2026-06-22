@@ -26,7 +26,8 @@ class Game():
         self.scene = Scene(self)
         self.running = True
 
-
+    def on_quit(self) :
+        self.running = False
 
     def on_draw(self):
         self.scene.on_draw()

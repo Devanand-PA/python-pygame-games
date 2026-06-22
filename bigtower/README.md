@@ -18,6 +18,12 @@ in Unix like systems and
 in Windows.
 
 # TODO :
+[ ] Make an input field class for the username and other things that you might need
+    # Plan :
+        - render clipped text, only to certain length, but store the whole text
+        - then , in the clipped text, ask pygame for the size of the text before the current selection
+        - render a line primitive right after that from the size you recieved
+        - update the cursor for moving left and right, and also for the mouse cursor (just compare the coords of the mouse cursor and the text )
 
 [ ] Make the layout for the career screen (options on the left, stats on the right)
     [ ] Options are : (graphics, back to main menu)
