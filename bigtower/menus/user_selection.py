@@ -50,8 +50,8 @@ class Scene() :
                 self.kill()
 
             if (event.key == pygame.K_RETURN) and (self.mainboxitems["User Input"]["item"].sel):
-                if self.mainboxitems["User Input"]["item"].full_text :
-                    self.game.user = self.mainboxitems["User Input"]["item"].full_text
+                if self.mainboxitems["User Input"]["item"].text :
+                    self.game.user = self.mainboxitems["User Input"]["item"].text
                     self.on_next_scene()
                     self.kill()
 
