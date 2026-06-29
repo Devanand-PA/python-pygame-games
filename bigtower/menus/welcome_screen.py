@@ -8,6 +8,7 @@ class Scene() :
         self.game = game
         self.background = pygame.image.load("assets/menus/welcom_screen_background.jpg")
         self.mainboxitems = []
+        self.scene_type = "menu"
         self.on_resize()
         self.mainbox_color = (10,10,10)
         self.mainbox =  pygame.Rect(

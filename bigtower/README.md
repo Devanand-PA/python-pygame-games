@@ -55,6 +55,37 @@ Depending on how much work is relegated to the engine, it will either be too tri
 But I guess I will do it anyways.
 also, since we will be dealing with a lot of units, it might be wise to write the engine in C
 
+Ok, for now I am just going to use numpy arrays for the engine instead of C
+
+So the plan is that when the game starts , there will be a new object called game.units which will look like this
+self.game.unit_array -> m number of players -> n units per player, each of which is np.array(\[self.coords,self.size,self.speed,self.range,self.cooldown\])
+The players will be referenced by name whereas the units will be referenced by numbers
+so for attacking units, we will just do something like :
+```
+deltatime -> number of milliseconds per frame
+for player in players :
+    for unit in player.units                        # Again , have to optimize this
+        player.unit.cooldown -= (deltatime*1000)
+
+
+for player in players : # in general this runs twice because usually there are 2 players , or maybe upto 4 players, idk
+    for unit in player.unit_array :      # I need a way to parallelize this
+        for other_player in players :
+            for unit2 in other_player.unit_array : # I need to parallelize this too
+                if np.linalg.norm(unit[0]-unit2[0] > unit[3]) and  (self.game.units[player][unit].cooldown <= 0) :
+                    self.game.units[other_player][unit2].hp -= self.game.units[player][unit].attack
+                    self.game.unit_array[player][unit][4] = self.game.units[player][unit].cooldown # 1000 is  1 second  
+```
+
+Also, there will be a lot of problems in the engine that can only be tested once the engine is complete, therefore the priorities should be :
+
+a) Document as much of the engine as possible, so that fixes are easier
+
+b) Finish the engine as fast as possible while maintaining sufficient documentation, that way , the engine can be fixed as fast as possible.
+
+c) While debugging the engine, document the changes made as well. Also after the debugging is done, document the whole engine all over again.
+
+d) After you are done testing and debugging the engine, test with actual assets. You will need more debugging after that.
 
 
 
