@@ -14,6 +14,7 @@ class Game :
                 self.screen_size,
                 pygame.FULLSCREEN
                 )
+        pygame.display.set_caption("paddle")
 
         self.clock = pygame.time.Clock()
         self.default_font = pygame.font.Font(None, 30)
