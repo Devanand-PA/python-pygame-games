@@ -4,7 +4,7 @@ import numpy as np
 
 class Unit() :
     def __init__(self,game,coords,damage):
-        self.coords = np.array(coords)
+        self.coords = np.array(coords,dtype=np.float64)
         self.damage = damage
         self.game = game
         pass
@@ -24,7 +24,7 @@ class Mob(Unit) :
     def __init__(self,game,coords,damage,speed) :
         super().__init__(game,coords,damage)
         self.speed = speed
-        self.vel = 0
+        self.vel =  np.array([0,0],dtype=np.float64)
 
     def on_draw(self) :
         pygame.draw.circle(self.game.screen,
@@ -42,8 +42,7 @@ class Mob(Unit) :
         # if not self.vel.all() :
         #     self.vel = np.array([0,0])
         print(f"\033[31m {self.vel} \033[0m")
-        self.coords[0] += int(self.vel[0])
-        self.coords[1] += int(self.vel[1])
+        self.coords += self.vel
         
 
 class Cell() :
@@ -68,7 +67,7 @@ class Game() :
                     Tower(self,[random.randint(100,500) for i in range(2)],10)
                     )
             self.mobs.append(
-                    Mob(self,[random.randint(0,600) for i in range(2)],10,2)
+                    Mob(self,[random.randint(0,600) for i in range(2)],10,1)
                     )
         self.divide_areas()
 
