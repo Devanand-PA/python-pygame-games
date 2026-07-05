@@ -32,9 +32,18 @@ class Mob(Unit) :
                            5
                            )
     def path_to(self,target) :
-        target_distance = np.linalg.norm(self.coords - target.coords)
-        self.vel = (self.speed * (self.coords - target.coords)) / target_distance
-        self.coords += self.vel
+        target_distance = np.linalg.norm(target.coords - self.coords)
+        if target_distance : 
+            self.vel = ( (self.speed * (target.coords - self.coords)) / target_distance )
+        else :
+             self.vel = np.array([0,0])
+
+        # print(f"\033[32m {self.vel} \033[0m")
+        # if not self.vel.all() :
+        #     self.vel = np.array([0,0])
+        print(f"\033[31m {self.vel} \033[0m")
+        self.coords[0] += int(self.vel[0])
+        self.coords[1] += int(self.vel[1])
         
 
 class Cell() :
@@ -56,7 +65,7 @@ class Game() :
         self.mobs = []
         for i in range(10) : 
             self.towers.append(
-                    Tower(self,[random.randint(0,600) for i in range(2)],10)
+                    Tower(self,[random.randint(100,500) for i in range(2)],10)
                     )
             self.mobs.append(
                     Mob(self,[random.randint(0,600) for i in range(2)],10,2)
@@ -106,11 +115,16 @@ class Game() :
             pass
         if event.type == pygame.QUIT :
             self.running = False
+    def on_update(self) :
+        for mob in self.mobs :
+            mob.path_to(self.main_target)
 
     def run(self) :
+        self.main_target = random.choice(self.towers)
         while self.running :
             for event in pygame.event.get() :
                 self.handle_event(event)
+            self.on_update()
             self.on_draw()
             pygame.display.flip()
 
