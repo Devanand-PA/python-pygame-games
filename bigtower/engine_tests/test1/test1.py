@@ -16,6 +16,10 @@ class Unit() :
 
         cell_y = int(np.ceil( ( self.coords[1] * (len(self.game.divs[1])) ) //
                   self.game.screen_res[1] ) - 1)
+        print("==================================")
+        print(cell_x , cell_y)
+        print(len(self.game.all_cells))
+        print("==================================")
         self.game.all_cells[cell_x][cell_y].units.append(self)
         return cell_x , cell_y
 
@@ -35,12 +39,30 @@ class Unit() :
 
     def choose_target(self) :
         target_found = False
-        for o_range in range(max(  len(self.game.divs[0]) , len(self.game.divs[1])  )) :
-            for i_range in range(o_range) :
-                pass
+        target = None
+        target_distance = sum(self.game.screen_res) # Set initially to an unreachable distance, practically infinity
+        for max_range in range(max(  len(self.game.divs[0]) , len(self.game.divs[1])  )) :
 
+            if target_found :
+                    break
+            for curr_row_rel , curr_row in enumerate(               #this is just a[b-c : b+c]
+                self.game.all_cells[
+                max(0,(self.cell_x - max_range)) :                  # I don't want this to go below 0
+                min(len(self.game.all_cells),(self.cell_x + max_range)) # I don't want this to go beyond range
+                ]) :
 
-                        
+                        for curr_cell_rel , curr_cell in enumerate( # The reason I am using enumerate is just in case I need the relative index at some point
+                            curr_row[
+                            max(0,(self.cell_y - max_range)) :                  # I don't want this to go below 0
+                            min(len(curr_row),(self.cell_y + max_range)) # I don't want this to go beyond range
+                            ]):
+                                for unit_idx , unit_considered in enumerate(curr_cell.units) :
+                                    if unit_considered in self.game.towers :
+                                        if ( curr_dist:=  np.linalg.norm(unit_considered.coords - self.coords)) < target_distance:
+                                            target_distance = curr_dist
+                                            target = unit_considered
+                                            target_found = True
+        return target
 
 
 class Tower(Unit) :
@@ -151,7 +173,9 @@ class Game() :
     def on_update(self) :
         for mob in self.mobs :
             if not mob.target :
-                mob.path_to(self.main_target)
+                mob.target = mob.choose_target() or self.main_target
+            mob.path_to(mob.target)
+            print("pathing",mob,"to",mob.target)
             if mob.remove_from_cell() :
                 mob.cell_x , mob.cell_y = mob.put_in_cell()
             print(f"\033[31m {mob.vel} , \033[30;42mCell : [{mob.cell_x}] [{mob.cell_y}]  \033[0m")
