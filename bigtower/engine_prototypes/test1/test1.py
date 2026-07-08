@@ -19,10 +19,10 @@ class Unit() :
         cell_x = max(0, min(cell_x, num_cells_x - 1))
         cell_y = max(0, min(cell_y, num_cells_y - 1))
 
-        print("==================================")
-        print(cell_x , cell_y)
-        print(len(self.game.all_cells))
-        print("==================================")
+        # print("==================================")
+        # print(cell_x , cell_y)
+        # print(len(self.game.all_cells))
+        # print("==================================")
         self.game.all_cells[cell_x][cell_y].units.append(self)
         return cell_x , cell_y
 
@@ -123,10 +123,10 @@ class Game() :
         self.mobs = []
         for i in range(100) : 
             self.towers.append(
-                    Tower(self,[random.randint(100,500) for i in range(2)],10)
+                    Tower(self,[random.randint(100,500-1) for i in range(2)],10)
                     )
             self.mobs.append(
-                    Mob(self,[random.randint(0,600) for i in range(2)],10,1)
+                    Mob(self,[random.randint(0,600-1) for i in range(2)],10,1)
                     )
 
     def draw_lattice(self) :
@@ -145,8 +145,8 @@ class Game() :
 
     def divide_areas(self) :
         self.all_cells = []
-        divs_h = np.linspace(0 , self.screen_res[0] , self.screen_res[0] // 100)
-        divs_v = np.linspace( 0 , self.screen_res[1] , self.screen_res[1] // 100)
+        divs_h = np.linspace(0 , self.screen_res[0] , self.screen_res[0] // 100 + 1)
+        divs_v = np.linspace( 0 , self.screen_res[1] , self.screen_res[1] // 100 + 1)
         self.divs = [ divs_h , divs_v ]
         for i in range(len(divs_h)-1) : # The last entry in divs_h is the right hand edge
             self.all_cells.append([])
