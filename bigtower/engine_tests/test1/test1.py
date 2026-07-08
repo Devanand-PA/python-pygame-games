@@ -11,11 +11,14 @@ class Unit() :
         self.cell_x , self.cell_y = self.put_in_cell()
     
     def put_in_cell(self) :
-        cell_x = int(np.ceil( ( self.coords[0] * (len(self.game.divs[0])) ) //
-                  self.game.screen_res[0] ) - 1)
+        num_cells_x = len(self.game.all_cells)
+        num_cells_y = len(self.game.all_cells[0]) if num_cells_x > 0 else 0
+        
+        cell_x = int(self.coords[0] * num_cells_x // self.game.screen_res[0])
+        cell_y = int(self.coords[1] * num_cells_y // self.game.screen_res[1])
+        cell_x = max(0, min(cell_x, num_cells_x - 1))
+        cell_y = max(0, min(cell_y, num_cells_y - 1))
 
-        cell_y = int(np.ceil( ( self.coords[1] * (len(self.game.divs[1])) ) //
-                  self.game.screen_res[1] ) - 1)
         print("==================================")
         print(cell_x , cell_y)
         print(len(self.game.all_cells))
