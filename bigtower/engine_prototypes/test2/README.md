@@ -3,5 +3,6 @@
 
 # TO DO
 [ ] Make it work with sprites
-[ ] Make the map scrollable
+[x] Make the map scrollable
+[x] Make it only render the units in the renderable screen
 [x] Make it so that you can spawn towers and mobs via mouse
