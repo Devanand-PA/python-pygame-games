@@ -2,15 +2,20 @@
 - To do the same thing that test 2 can do, but make it so that the engine is a separate callable library that just takes in units as they are added.
 
 # TO DO
-[ ] Make the Game separate from the "engine"
-[ ] Make a separate lib for "units"
-[ ] Make some "Player" variables and also track units by player and player groups, instead of "mobs" vs "towers"
-[ ] Make it so that the unit append via clicking is implemented in the "Game" instead of the "engine"
-[ ] Make multiple "Tower" and "Mob" types
+[x] Make the Game separate from the "engine"
+[x] Make a separate lib for "units"
+[x] Make some "Player" variables and also track units by player and player groups, instead of "mobs" vs "towers"
+[x] Make it so that the unit append via clicking is implemented in the "Game" instead of the "engine"
+[x] Make multiple "Tower" and "Mob" types
+[x] separate "pathing" from "movement"
+[?] Parallelize choose_target() and path_to() # This might be premature optimization, I don't know
 
 # Scratchpad
 
+NOTE : Calculate the new positions of each unit in parallel first ( in a way that only reads data or computes from a copy) , and then do a sequential movement update
+
 ## For Players
+
 
 Something like
 ```

@@ -31,8 +31,8 @@ in Windows.
 [ ] Make the options menu (add a recursive stack for layered menus)
 
 ## Done
-[✓] Figure out how to get mouse click to work on the menus
-[✓] Make an input field class for the username and other things that you might need
+[x] Figure out how to get mouse click to work on the menus
+[x] Make an input field class for the username and other things that you might need
 
 # Plan :
 
