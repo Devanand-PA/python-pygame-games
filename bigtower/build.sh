@@ -7,4 +7,3 @@ cp -r dist/main assets/ "$DIR"
 cd "$DIR"
 mv main bigtower
 zip --recurse-paths bigtower.zip assets bigtower
-
