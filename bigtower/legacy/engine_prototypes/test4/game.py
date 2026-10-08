@@ -3,18 +3,22 @@ import numpy as np
 import random
 from units import *
 
+import os
+import sys
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def asset_path(*parts):
+    return os.path.join(BASE_DIR, *parts)
 
 def tint_surface(surface, color):
-    # 1. Create a copy of the original surface to avoid altering the asset permanently
+    # Create a copy of the original surface
     tinted_surface = surface.copy()
     
-    # 2. Create a solid color surface of the exact same size
     color_surface = pygame.Surface(surface.get_size()).convert_alpha()
     color_surface.fill(color)
     
-    # 3. Blend the solid color with your image using BLEND_RGBA_MULT
-    # This multiplies the color channels while maintaining the transparency mask
+    #  Blend the solid color with image
     tinted_surface.blit(color_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
     
     return tinted_surface
@@ -47,7 +51,7 @@ class Game() :
         self.screen_res
         )
         self.clock = pygame.time.Clock()
-        self.tower_sprite = pygame.image.load("tower_1.png")
+        self.tower_sprite = pygame.image.load(asset_path("tower_1.png"))
         self.tower_sprite2 = tint_surface(self.tower_sprite,(100,0,0))
         self.running = True
         from engine import Engine

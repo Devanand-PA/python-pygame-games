@@ -31,7 +31,8 @@ class Scene() :
             {   "name"  : "Campaign Button",
                 "type"  : "Button" ,
                 "text"  : "Campaign Menu",
-                "item"  : None
+                "item"  : None,
+             "function" : self.action_campaign_button_pressed
                 },
 
             {   "name"  : "Main Menu Button",
@@ -165,6 +166,10 @@ class Scene() :
     def action_main_menu_button_pressed(self) :
                 from menus.welcome_screen import Scene
                 self.game.scene = Scene(self.game)
+
+    def action_campaign_button_pressed(self):
+        from menus.campaign_menu import Scene as subscene
+        self.game.subscenes.append(subscene(self.game))
 
     def on_resize(self) :
         self.background = pygame.transform.scale(self.background,(self.game.screen_size[0], self.game.screen_size[1]))
