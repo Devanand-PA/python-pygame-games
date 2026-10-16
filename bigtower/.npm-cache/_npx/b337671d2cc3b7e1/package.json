@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@liustack/modsearch": "^5.10.7"
+  },
+  "_npx": {
+    "packages": [
+      "@liustack/modsearch@5.10.7"
+    ]
+  }
+}

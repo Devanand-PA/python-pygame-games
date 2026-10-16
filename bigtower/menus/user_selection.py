@@ -1,139 +1,101 @@
+"""User selection overlay: pick an existing user or type a new name.
+
+Fixes vs the old scene:
+  - no crash when the user list is empty (fresh install)
+  - no crash when the save location is read-only (falls back inside savestate)
+"""
 import pygame
-from utils.gui_elements import namecallableList , InputBox , ListBox , Button
 
-class Scene() :
-    def __init__ (self, game , enlisted_users, next_scene=None) :
-        self.game = game
-        self.background = pygame.image.load("assets/menus/welcom_screen_background_2.jpg")
-        self.subscene_index = len(game.subscenes)
-        self.enlisted_users = enlisted_users or []
+from core import savestate
+from core.scene import Scene
+from gui.widgets import InputBox, ListBox
+
+
+class Scene(Scene):
+    scene_type = "menu"
+
+    def __init__(self, game, users, next_scene="menus.career_menu"):
+        super().__init__(game)
         self.next_scene = next_scene
-        self.mainbox_width = self.game.screen_size[0] // 2
-        self.mainbox_height = self.game.screen_size[1] // 2
-        self.mainbox_color = (10,10,10)
-        self.mainbox =  pygame.Rect(
-                self.game.screen_size[0] // 4,
-                self.game.screen_size[1] // 4,
-                self.mainbox_width,
-                self.mainbox_height
-                )
-        self.background = pygame.transform.scale(self.background,(self.mainbox.width, self.mainbox.height))
-        self.mainboxitems = namecallableList([
-            { "name" : "User Input",
-                "type" : "InputBox",
+        self.box = pygame.Rect(0, 0, 560, 420)
+        self.box.center = (self.game.canvas.get_width() // 2,
+                           self.game.canvas.get_height() // 2)
 
-                },
-            { "name" : "User List",
-                "type" : "ListBox",
-                "list" : self.enlisted_users}
+        self.title = game.fonts["big"].render("Enter User Name", True,
+                                              (250, 250, 240))
+        self.input = InputBox(game, (self.box.x + 30, self.box.y + 70),
+                              (self.box.width - 60,), font_size=40, sel=True)
+        self.userlist = ListBox(game, (self.box.x + 30, self.input.rect.bottom + 16),
+                                (self.box.width - 60,
+                                 self.box.height - 150),
+                                users or [], sel=False)
+        self.hint = game.fonts["small"].render(
+            "Type a name (Enter to confirm) - or pick one from the list - Esc to cancel",
+            True, (200, 200, 200))
 
-            ])
-        self.init_menuitems()
-        self.titleprompt = "Enter User Name"
-        self.rendered_title = Button(self.game,
-                                     [ self.mainbox.x ,self.mainbox.y - self.game.title_font.size(self.titleprompt)[1]],
-                                     list(self.game.title_font.size(self.titleprompt)),
-                                     text=self.titleprompt,
-                                     font = pygame.font.Font(None,36)
-                                     )
+    # ---------------------------------------------------------------- actions
+    def confirm(self):
+        name = self.input.text.strip()
+        if not name:
+            self.game.play("error", 0.5)
+            return
+        try:
+            savestate.create_user(name)
+        except ValueError:
+            self.game.play("error", 0.5)
+            return
+        self.game.set_user(name)
+        self.game.play("place", 0.5)
+        self.close_and_continue()
 
+    def close_and_continue(self):
+        # remove this overlay from the stack first
+        if self in self.game.subscenes:
+            self.game.subscenes.remove(self)
+        if self.next_scene:
+            import importlib
+            module = importlib.import_module(self.next_scene)
+            self.game.scene = module.Scene(self.game)
 
-    def init_menuitems(self) :
-        pad_y_init = 10
-        pad_y = pad_y_init
-        for item in self.mainboxitems :
-            if item["type"] == "InputBox" :
-                item["item"] = InputBox(self.game,
-                                        [ self.mainbox.x + (self.mainbox.width// 10)  , self.mainbox.y + pad_y ],
-                                        [(self.mainbox.width * 8) //10 , "doesn't matter" ],
-                                        font_size=48,sel=True)
-                pad_y += item["item"].size[1]
-            elif item["type"] == "ListBox" :
-                item["item"] = ListBox(self.game,
-                                    [ self.mainbox.x + (self.mainbox.width// 10)  , self.mainbox.y + pad_y ],
-                                        [(self.mainbox.width * 8) //10 , self.mainbox.height - (pad_y - pad_y_init) - self.mainboxitems["User Input"]["item"].size[1] ],
-                                        item["list"], sel=True
-                                       )
-                item["item"].curr_sel = -1
-                pad_y += self.mainboxitems["User Input"]["item"].size[1]
+    # ---------------------------------------------------------------- events
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.close_overlay()
+                return
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.confirm()
+                return
+            self.input.handle_event(event)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.input.rect.collidepoint(event.pos):
+                self.input.sel = True
+                self.userlist.sel = False
+            elif self.userlist.rect.collidepoint(event.pos):
+                self.userlist.handle_event(event)
+                if self.userlist.sel_text:
+                    self.input.set_text(self.userlist.sel_text)
+        elif event.type == pygame.MOUSEMOTION:
+            if self.userlist.rect.collidepoint(event.pos):
+                self.userlist.handle_event(event)
+        elif event.type == pygame.MOUSEWHEEL:
+            if self.userlist.rect.collidepoint(event.pos):
+                self.userlist.handle_event(event)
 
-    def on_next_scene(self) :
-        import importlib
-        sceneLib = importlib.import_module(str(self.next_scene))
-        loadedScene = getattr(sceneLib, "Scene")
-        self.game.scene = loadedScene(self.game)
+    def on_draw(self):
+        # dim whatever is underneath
+        veil = pygame.Surface(self.game.canvas.get_size(), pygame.SRCALPHA)
+        veil.fill((0, 0, 0, 160))
+        self.game.canvas.blit(veil, (0, 0))
 
-
-    def kill(self) :
-        self.game.subscenes.pop(self.subscene_index) 
-
-    def action_confirmed(self) :
-                    self.game.user = self.mainboxitems["User Input"]["item"].text
-                    from utils.savestate import create_user
-                    create_user(self.game.user)
-                    if self.next_scene :
-                        self.on_next_scene()
-                    self.kill()
-
-
-    def update_inputbox(self) :
-                self.mainboxitems["User Input"]["item"].text = self.mainboxitems["User List"]["item"].sel_text
-                self.mainboxitems["User Input"]["item"].d_i = [0, 
-                                        min( 
-                    len(self.mainboxitems["User Input"]["item"].text) ,
-                    (self.mainboxitems["User Input"]["item"].rect.width // self.mainboxitems["User Input"]["item"].font.size("A")[0]) - 1
-                                            )]
-                self.mainboxitems["User Input"]["item"].curpos = self.mainboxitems["User Input"]["item"].d_i[1]
-    
-
-    def default_handle_event(self,event) :
-        if event.type == pygame.MOUSEBUTTONUP :
-            if event.button == 1 :
-                self.update_inputbox()
-
-        if event.type == pygame.KEYDOWN :
-            if (event.key == pygame.K_ESCAPE):
-                self.kill()
-
-            if (event.key == pygame.K_RETURN):
-                if self.mainboxitems["User Input"]["item"].text :
-                    self.action_confirmed()
-
-        for item in self.mainboxitems :
-            if ("item" in item) and (item["item"].sel) :
-                item["item"].handle_event(event)
- 
-        if event.type == pygame.KEYDOWN :
-            if (event.key in [pygame.K_UP,pygame.K_DOWN]):
-                self.update_inputbox()
-                
-
-    def handle_event(self,event) :
-        self.default_handle_event(event)
-
-    def handle_keypress(self) :
-        pass
-
- 
-    def on_update(self,delta_time) :
-        pass
-
-
-    def on_draw(self) :
-        self.rendered_title.on_draw()
-        self.game.screen.blit(
-                self.background,
-                (self.mainbox.x,self.mainbox.y)
-                )
-        pygame.draw.rect(
-                self.game.screen,
-            self.mainbox_color,
-            self.mainbox,
-            5
-            )
-        for item in self.mainboxitems :
-            if "item" in item :
-                item["item"].on_draw()
-   
-
-
+        pygame.draw.rect(self.game.canvas, (18, 18, 26), self.box, border_radius=10)
+        pygame.draw.rect(self.game.canvas, (90, 86, 120), self.box, 3, border_radius=10)
+        self.game.canvas.blit(self.title,
+                              self.title.get_rect(midtop=(self.box.centerx,
+                                                          self.box.y + 18)))
+        self.input.on_draw()
+        if self.userlist.items:
+            self.userlist.on_draw()
+        self.game.canvas.blit(self.hint,
+                              self.hint.get_rect(midbottom=(self.box.centerx,
+                                                            self.box.bottom - 12)))

@@ -40,7 +40,7 @@ class Game() :
         #===================
 
 
-        self.screen_res = [600,600]
+        self.screen_res = [800,600]
         self.map_size = [2000,2000]
         self.screen_topleft = np.array([0,0],dtype=int)
         self.screen = pygame.display.set_mode(

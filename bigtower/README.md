@@ -2,6 +2,34 @@
 
 A tower defense game
 
+## Running
+
+```sh
+# from the repository root (the folder containing main.py)
+.venv/bin/python main.py            # windowed
+.venv/bin/python main.py --fullscreen
+```
+
+The internal resolution is a fixed 1280x720 canvas that is letterboxed into the
+window, so the game looks consistent at any window size. `F11` toggles
+fullscreen.
+
+Flow: Main menu -> pick/create a player -> Career hub -> Play Campaign ->
+Select Level -> defend the base. Placing towers costs gold (kill enemies to
+earn more), right-click cancels the current selection, and `Space` calls the
+next wave early for a bonus. Progress is saved per player.
+
+## Status
+
+The engine (top of the repo: `core/`, `engine/`, `gui/`, `menus/`) is a working
+pygame rewrite. All three campaign levels are playable and winnable, progress
+and stats persist between runs, and the code is exercised by headless tests:
+
+```sh
+SDL_VIDEODRIVER=dummy .venv/bin/python tools/flow_test.py   # logic + persistence
+.venv/bin/python tools/screenshots.py                       # visual snapshots
+```
+
 # Notice :
 shifting the base to pygame from arcade
 
@@ -20,17 +48,15 @@ in Windows.
 # TODO :
 
 ## Pending
-[ ] Write the engine
-
 [ ] Make a Text Box Class that parses markdown to scrollable text
 
-[ ] Make the layout for the career screen (options on the left, stats on the right)
-    [ ] Options are : (graphics, back to main menu)
-
-[ ] Make the campaign screen (campaigns levels on the left, upgrades on the right)
-[ ] Make the options menu (add a recursive stack for layered menus)
+[ ] Make the campaign screen richer (campaigns on the left, upgrades on the right)
+    [ ] Persistent tower upgrades purchased between levels
 
 ## Done
+[x] Write the engine (pygame port lives in core/, engine/, gui/, menus/)
+[x] Playable career menu, level select with unlock progress and saved stats
+[x] 3 playable campaign levels with towers, enemies, waves, win/lose flow
 [x] Figure out how to get mouse click to work on the menus
 [x] Make an input field class for the username and other things that you might need
 

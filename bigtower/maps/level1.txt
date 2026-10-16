@@ -1,0 +1,12 @@
+# Level 1 - Greenfield Road
+# legend: S spawn  B base  . path  g grass(buildable)  r rock  t tree
+ggtgggggggggggggtggg
+gggggggggggggggggggg
+S.............gggggg
+ggggggggggggg.gggggg
+ggggggggggggg.gggggg
+ggggggggggggg.gggggg
+gggg..........gggggg
+gggg.ggggggggggggggg
+gggg...............B
+gtgggggggggggggggtgg

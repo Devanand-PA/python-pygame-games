@@ -1,70 +1,34 @@
-import pygame
+#!/usr/bin/env python3
+"""Big Tower -- a tower defense game.
 
-# Screen settings
-# SCREEN_WIDTH = 800
-# SCREEN_HEIGHT = 600
-SCREEN_TITLE = "Big Tower"
+Usage:
+    python main.py [--fullscreen]
 
+Run from anywhere; assets are resolved relative to this file.
+"""
+import sys
+from pathlib import Path
 
-class Game():
-    def __init__(self):
-        pygame.init()
-        self.screen_info = pygame.display.Info()
-        self.user = None
-        self.subscenes = []
-        self.screen_size = [self.screen_info.current_w , self.screen_info.current_h ] 
-        #self.screen_size = [ SCREEN_WIDTH ,SCREEN_HEIGHT ]
-        self.screen = pygame.display.set_mode(
-                self.screen_size,
-                pygame.FULLSCREEN
-                )
-        self.clock = pygame.time.Clock()
-        self.default_font = pygame.font.Font(None, 30)
-        self.title_font = pygame.font.Font( None, 60)
+# make imports work no matter where the game is launched from
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-        from menus.welcome_screen import Scene
-        self.scene = Scene(self)
-        self.running = True
-
-    def on_quit(self) :
-        self.running = False
-
-    def on_draw(self):
-        self.scene.on_draw()
-        for scene in self.subscenes :
-            scene.on_draw()
+from core.game import Game  # noqa: E402
 
 
-    def on_update(self, delta_time):
-        if not self.subscenes :
-            self.scene.on_update(delta_time)
-        else :
-            self.subscenes[-1].on_update(delta_time)
+def main():
+    fullscreen = "--fullscreen" in sys.argv
+    game = Game(fullscreen=fullscreen)
 
-    def run(self) :
-        self.delta_time = self.clock.tick(60) / 1000.0
-        self.running = True
-        while self.running :
-            self.on_update(self.delta_time)
-            self.on_draw()
-            pygame.display.flip()
-            
-            for event in pygame.event.get() :
-                if event.type == pygame.QUIT :
-                    self.running = False
-                
-                if not self.subscenes :
-                    self.scene.handle_event(event)
-                elif self.subscenes : 
-                    self.subscenes[-1].handle_event(event)
+    from menus.welcome_screen import Scene
+    game.scene = Scene(game)
+    game.run()
+    pygame_quit()
 
-            if not self.subscenes :
-                self.scene.handle_keypress()
-            elif self.subscenes :
-                self.subscenes[-1].handle_keypress()
+
+def pygame_quit():
+    import pygame
+    pygame.quit()
 
 
 if __name__ == "__main__":
-    game = Game()
-    game.run()
-        
+    main()

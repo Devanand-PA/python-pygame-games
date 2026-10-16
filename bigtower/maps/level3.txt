@@ -1,0 +1,12 @@
+# Level 3 - Serpent's Coil
+# legend: S spawn  B base  . path  g grass(buildable)  r rock  t tree
+ggggggggtggggggggggg
+S.................gg
+ggggggggggggggggg.gg
+ggggggggggggggggg.gg
+gg.............gg.gg
+gg.ggggggggggg.gg.gg
+gg.ggB.........gg.gg
+gg.gggggggggggggg.gg
+gg................gg
+gggggggggggggggtgggg

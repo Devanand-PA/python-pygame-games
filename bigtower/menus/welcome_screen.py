@@ -1,164 +1,72 @@
+"""Main menu: background art + Start / Settings / Quit."""
 import pygame
 
-from utils.gui_elements import Button , namecallableList
-
-class Scene() :
-
-    def __init__(self,game) :
-        self.game = game
-        self.background = pygame.image.load("assets/menus/welcom_screen_background.jpg")
-        self.mainboxitems = []
-        self.scene_type = "menu"
-        self.on_resize()
-        self.mainbox_color = (10,10,10)
-        self.mainbox =  pygame.Rect(
-                2*(self.game.screen_size[0] // 3),
-                0,
-                self.mainbox_width,
-                self.mainbox_height
-                )
-        
-        self.mainboxitems = namecallableList([
-                 {   
-                "name" : "Start Button",
-                "type" : "Button",
-                "text" : "Start Game",
-                "function" : self.action_start_button_pressed
-                 },
-
-                 {   
-                 "name" : "Load Button",
-                 "type" : "Button",
-                 "text" : "Load Game"
-                 },
-            
-                 {   
-                 "name" : "Settings Button",
-                 "type" : "Button",
-                 "text" : "Settings"
-                 },
-
-                 {   
-                 "name" : "Quit Button",
-                 "type" : "Button",
-                 "text" : "Quit Game",
-                  "function" : self.game.on_quit
-                 },
-                 ])
-        self.init_buttons()
+from core import paths
+from core.scene import Scene
+from menus.common import MenuPage
 
 
-    def init_buttons(self) :
-        top_pad = 0
-        self.button_height = 50
-        for item in self.mainboxitems :
-            if item["type"] == "Button" :
-                item["item"] = Button(self.game,
-                                    [self.mainbox.x + 10, self.mainbox.y + 10 + top_pad],
-                                    [self.mainbox_width - 20 , self.button_height],
-                                    fgcolor=[(0,0,0),(0,0,0)],
-                                    bgcolor=[(100,100,0),(200,200,0)],
-                                    text=item["text"],
-                                    sel=False
-                                      )
+class Scene(MenuPage, Scene):
+    scene_type = "menu"
 
-            top_pad += item["item"].size[1] + 10
-        self.mainboxitems[0]["item"].sel = True
-        self.mainbox.height = top_pad + 10
+    def __init__(self, game):
+        super().__init__(game)
+        self.background = pygame.image.load(
+            str(paths.asset("menus", "welcome_background.jpg"))).convert()
+        self.background = pygame.transform.scale(
+            self.background, (self.game.canvas.get_size()))
+        self.title = self.game.fonts["title"].render("BIG TOWER", True, (250, 250, 240))
 
-    def action_start_button_pressed(self):
-                if self.game.user :
-                    from menus.career_menu import Scene
-                    self.game.scene = Scene(self.game)
-                else : 
-                    from utils.savestate import list_users
-                    enlisted_users = list_users()
-                    from menus.user_selection import Scene as subscene
-                    self.game.subscenes.append(subscene(self.game,enlisted_users,next_scene="menus.career_menu"))
+        self.mainbox = pygame.Rect(0, 0, 380, 300)
+        self.mainbox.bottomright = (self.game.canvas.get_width() - 60,
+                                    self.game.canvas.get_height() - 60)
+        self.last_user = self._known_last_user()
+        start_text = ("Continue as {}".format(self.last_user)
+                      if self.last_user else "Start Game")
+        self.buttons = self._make_menu_buttons([
+            {"name": "start", "text": start_text, "function": self.action_start},
+            {"name": "settings", "text": "Settings", "function": self.action_settings},
+            {"name": "quit", "text": "Quit Game", "function": self.game.on_quit},
+        ], self.mainbox)
 
-    def on_draw(self) :
-        self.game.screen.blit(
-                self.background,
-                (0,0)
-                )
+    def _known_last_user(self):
+        """Return the remembered profile only if it still exists on disk."""
+        from core import savestate
+        name = self.game.settings.get("last_user") or ""
+        if name and savestate.user_exists(name):
+            return name
+        return ""
 
-        pygame.draw.rect(
-                self.game.screen,
-            self.mainbox_color,
-            self.mainbox,
-            )
-        
-        for item in self.mainboxitems : 
-            item["item"].on_draw()
+    def action_start(self):
+        from core import savestate
+        from menus.career_menu import Scene as Career
+        # Resume the remembered profile, or jump straight in if one is active.
+        if self.game.user or self.last_user:
+            self.game.set_user(self.game.user or self.last_user)
+            self.replace_with(Career(self.game))
+            return
+        from menus.user_selection import Scene as UserSelect
+        users = savestate.list_users()
+        self.push_overlay(UserSelect(self.game, users))
 
+    def action_settings(self):
+        from menus.settings_overlay import Scene as Settings
+        self.push_overlay(Settings(self.game))
 
-    def on_resize(self) :
-        self.background = pygame.transform.scale(self.background,(self.game.screen_size[0], self.game.screen_size[1]))
-        self.mainbox_width = self.game.screen_size[0] // 3
-        self.mainbox_height = self.game.screen_size[1] // 2
-        self.mainbox =  pygame.Rect(
-                5*(self.game.screen_size[0] // 6),
-                (self.game.screen_size[1] // 4),
-                self.mainbox_width,
-                self.mainbox_height
-                )
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.menu_hover(self.buttons, event.pos)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.menu_click(self.buttons, event.pos)
+        elif event.type == pygame.KEYDOWN:
+            self.menu_key(self.buttons, event)
 
-        top_pad = 0
-        for item in self.mainboxitems :
-            item["item"].coords = [self.mainbox.x + 10, self.mainbox.y + 10 + top_pad],
-            item["item"].size = [self.mainbox_width - 20 , self.button_height]
-            item["item"].on_resize()
-            top_pad += item["item"].size[1] + 10
-        self.mainbox.height = top_pad + 10
-
-
-    def default_handle_event(self,event) :
-        # Moue events :
-        if event.type == pygame.MOUSEMOTION :
-            for item in self.mainboxitems :
-                if item["item"].rect.collidepoint(event.pos) :
-                    for item2 in self.mainboxitems :
-                        item2["item"].sel = False
-                    item["item"].sel = True
-
-        if event.type == pygame.MOUSEBUTTONUP :
-            if event.button == 1 :
-                for item in self.mainboxitems :
-                    if item["item"].rect.collidepoint(event.pos) :
-                        item["item"].sel = True
-                        if "function" in item :
-                            item["function"]()
-
-
-
-        # Keyboard events
-        if event.type == pygame.KEYDOWN :
-            if (event.key == pygame.K_RETURN):
-                for item in self.mainboxitems :
-                    if (item["item"].sel) and ("function" in item) :
-                            item["function"]()
-
-
-            elif event.key == pygame.K_UP :
-                for i in range(len(self.mainboxitems)) :
-                    if (self.mainboxitems[i]["item"].sel == True) :
-                        self.mainboxitems[i]["item"].sel = False
-                        self.mainboxitems[ (i-1) % len(self.mainboxitems)]["item"].sel = True
-                        break
-    
-            elif event.key == pygame.K_DOWN :
-                for i in range(len(self.mainboxitems)) :
-                    if (self.mainboxitems[i]["item"].sel == True) :
-                        self.mainboxitems[i]["item"].sel = False
-                        self.mainboxitems[ (i+1) % len(self.mainboxitems)]["item"].sel = True
-                        break
-
-        
-    def handle_event(self,event) :
-        self.default_handle_event(event)
-
-    def handle_keypress(self) :
-        pass
-
-    def on_update(self, delta_time):
-        pass
+    def on_draw(self):
+        self.game.canvas.blit(self.background, (0, 0))
+        self.draw_menu_box(self.mainbox)
+        for b in self.buttons:
+            b.on_draw()
+        self.game.canvas.blit(self.title,
+                              self.title.get_rect(
+                                  topright=(self.mainbox.right - 20,
+                                            self.mainbox.top - 70)))

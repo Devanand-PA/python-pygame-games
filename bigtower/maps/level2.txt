@@ -1,0 +1,12 @@
+# Level 2 - Twin Brooks
+# legend: S spawn  B base  . path  g grass(buildable)  r rock  t tree
+gggggggggggggggggggg
+gggggggg.......ggggg
+gggggggg.ggggg.ggggg
+gggggggg.ggggg.ggggg
+S........ggggg.ggggg
+gggggggggggggg.ggggg
+gggggggggggggg.ggggg
+gggggggggggggg.ggggg
+ggB............ggggg
+gggggggtgggggggggtgg
