@@ -196,9 +196,14 @@ def main():
     os.chmod(ro_dir, 0o500)  # read-only
     os.environ["BIGTOWER_SAVE_DIR"] = str(ro_dir)
     importlib.reload(core.paths)
-    check("fallback when env dir read-only",
-          str(core.paths.saves_root()) != str(ro_dir),
-          str(core.paths.saves_root()))
+    if os.access(ro_dir, os.W_OK):
+        # chmod does not restrict directories on this platform (e.g. Windows,
+        # or when running as root), so the fallback cannot be exercised here.
+        print("SKIP fallback when env dir read-only (chmod not enforced)")
+    else:
+        check("fallback when env dir read-only",
+              str(core.paths.saves_root()) != str(ro_dir),
+              str(core.paths.saves_root()))
     os.chmod(ro_dir, 0o700)
 
     # ---------------------------------------------------------------- summary

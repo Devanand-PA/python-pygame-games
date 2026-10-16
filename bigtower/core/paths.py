@@ -8,8 +8,14 @@ and old read-only save locations are still read for backwards compatibility.
 """
 import os
 import pathlib
+import sys
 
-BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):
+    # Running from a PyInstaller bundle: assets are unpacked next to the
+    # executable (onefile: sys._MEIPASS; onedir: the _internal folder).
+    BASE_DIR = pathlib.Path(getattr(sys, "_MEIPASS", pathlib.Path(sys.executable).parent))
+else:
+    BASE_DIR = pathlib.Path(__file__).resolve().parent.parent
 ASSETS_DIR = BASE_DIR / "assets"
 MAPS_DIR = BASE_DIR / "maps"
 PACK_DIR = ASSETS_DIR / "packs" / "kenney_tower-defense-top-down" / "PNG" / "Default size"

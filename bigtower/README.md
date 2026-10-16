@@ -30,6 +30,30 @@ SDL_VIDEODRIVER=dummy .venv/bin/python tools/flow_test.py   # logic + persistenc
 .venv/bin/python tools/screenshots.py                       # visual snapshots
 ```
 
+## Building a release
+
+`build.sh` bundles the game code, every asset and all maps *inside* a single
+`--onefile` executable, then zips it for distribution:
+
+```sh
+./build.sh
+```
+
+Output:
+
+- `dist/bigtower` — the self-contained game (runs from anywhere)
+- `dist/bigtower-<os>-<arch>.zip` — distributable archive
+
+PyInstaller is installed into `.venv` automatically if it is missing. The
+underlying cross-platform build lives in `build.py` (used both locally and by
+CI).
+
+Every push to `main` runs `.github/workflows/bigtower.yml`, which builds
+Linux, Windows and macOS executables and publishes them to the release page
+under the rolling
+[`bigtower-latest`](https://github.com/Devanand-PA/python-pygame-games/releases/tag/bigtower-latest)
+tag.
+
 # Notice :
 shifting the base to pygame from arcade
 
