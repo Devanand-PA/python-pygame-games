@@ -69,7 +69,7 @@ class InputBox:
     """Single-line text field with a scrolling window around the cursor."""
 
     def __init__(self, game, coords, size, font=None, font_size=0,
-                 sel=False, fg=(240, 240, 240)):
+                 sel=False, fg=(240, 240, 240), placeholder=""):
         self.game = game
         self.coords = list(coords)
         if font or font_size:
@@ -83,6 +83,8 @@ class InputBox:
         self.d_i = [0, 0]                  # visible slice [start, end]
         self.pad_x = self.font.size(">>")[0]
         self.fg = fg
+        self.placeholder = placeholder
+        self.placeholder_fg = (110, 110, 122)
         self.rect = pygame.Rect(self.coords[0], self.coords[1],
                                 self.size[0], self.size[1])
 
@@ -143,9 +145,14 @@ class InputBox:
                          (235, 235, 210) if self.sel else (120, 120, 120),
                          self.rect, 2, border_radius=3)
         visible = self.text[self.d_i[0]:self.d_i[1]]
-        rendered = self.font.render(visible, True, self.fg)
-        self.game.canvas.blit(rendered, (self.rect.x + self.pad_x,
-                                         self.rect.centery - rendered.get_height() // 2))
+        if visible:
+            rendered = self.font.render(visible, True, self.fg)
+            self.game.canvas.blit(rendered, (self.rect.x + self.pad_x,
+                                             self.rect.centery - rendered.get_height() // 2))
+        elif self.placeholder:
+            ph = self.font.render(self.placeholder, True, self.placeholder_fg)
+            self.game.canvas.blit(ph, (self.rect.x + self.pad_x,
+                                       self.rect.centery - ph.get_height() // 2))
         if self.sel and (pygame.time.get_ticks() % 1000) < 600:
             cursor_x = self.rect.x + self.pad_x + self.font.size(
                 self.text[self.d_i[0]:self.curpos])[0]
@@ -155,10 +162,15 @@ class InputBox:
 
 
 class ListBox:
-    """Scrollable single-selection list. Empty lists are fine (sel_text=None)."""
+    """Scrollable single-selection list. Empty lists are fine (sel_text=None).
+
+    Selection is explicit: it changes on click / Up-Down only. Hovering merely
+    highlights the row under the cursor, so keyboard and mouse never fight.
+    """
 
     def __init__(self, game, coords, size, items, sel=False,
-                 fg=(20, 20, 20), bg=(60, 60, 60), bg_sel=(200, 200, 40)):
+                 fg=(20, 20, 20), bg=(60, 60, 60), bg_sel=(200, 200, 40),
+                 bg_hover=(96, 92, 40)):
         self.game = game
         self.coords = list(coords)
         self.size = list(size)
@@ -167,61 +179,80 @@ class ListBox:
         self.row_h = self.font.get_height() + 8
         self.max_rows = max(1, (self.size[1] - 8) // self.row_h)
         self.scroll = 0            # first visible row
-        self.curr_sel = 0          # absolute selection index
+        self.curr_sel = 0 if (self.items and sel) else -1  # -1 = nothing chosen
+        self.hover = None          # row index under the cursor (visual only)
         self.sel = sel
         self.fg = fg
         self.bg = bg
         self.bg_sel = bg_sel
+        self.bg_hover = bg_hover
         self.rect = pygame.Rect(self.coords[0], self.coords[1],
                                 self.size[0], self.size[1])
-        self.sel_text = self.items[self.curr_sel] if self.items else None
+
+    @property
+    def sel_text(self):
+        if 0 <= self.curr_sel < len(self.items):
+            return self.items[self.curr_sel]
+        return None
 
     def on_resize(self):
         self.rect = pygame.Rect(self.coords[0], self.coords[1],
                                 self.size[0], self.size[1])
+        self.max_rows = max(1, (self.size[1] - 8) // self.row_h)
+        self._clamp()
 
     def set_items(self, items):
         self.items = list(items)
-        self.curr_sel = 0
+        self.curr_sel = 0 if (self.items and self.sel) else -1
         self.scroll = 0
-        self.sel_text = self.items[0] if self.items else None
+        self.hover = None
+        self._clamp()
 
     def _clamp(self):
         if not self.items:
-            self.curr_sel = 0
+            self.curr_sel = -1
             self.scroll = 0
-            self.sel_text = None
             return
-        self.curr_sel = max(0, min(self.curr_sel, len(self.items) - 1))
-        if self.curr_sel < self.scroll:
-            self.scroll = self.curr_sel
-        if self.curr_sel >= self.scroll + self.max_rows:
-            self.scroll = self.curr_sel - self.max_rows + 1
+        if self.curr_sel >= 0:
+            self.curr_sel = min(self.curr_sel, len(self.items) - 1)
+            if self.curr_sel < self.scroll:
+                self.scroll = self.curr_sel
+            if self.curr_sel >= self.scroll + self.max_rows:
+                self.scroll = self.curr_sel - self.max_rows + 1
         self.scroll = max(0, min(self.scroll, max(0, len(self.items) - self.max_rows)))
-        self.sel_text = self.items[self.curr_sel]
+
+    def _row_rect(self, row):
+        return pygame.Rect(self.rect.x + 4, self.rect.y + 4 + row * self.row_h,
+                           self.rect.width - 8, self.row_h)
+
+    def row_at(self, pos):
+        """Absolute item index under pos, or None."""
+        if not self.rect.collidepoint(pos):
+            return None
+        row = (pos[1] - (self.rect.y + 4)) // self.row_h
+        idx = self.scroll + row
+        if 0 <= idx < len(self.items):
+            return idx
+        return None
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEWHEEL and self.rect.collidepoint(event.pos):
             self.scroll = max(0, self.scroll - event.y)
             self._clamp()
         elif event.type == pygame.MOUSEMOTION:
-            for row in range(self.max_rows):
-                idx = self.scroll + row
-                if idx >= len(self.items):
-                    break
-                row_rect = pygame.Rect(self.rect.x + 4,
-                                       self.rect.y + 4 + row * self.row_h,
-                                       self.rect.width - 8, self.row_h)
-                if row_rect.collidepoint(event.pos):
-                    self.curr_sel = idx
-                    self._clamp()
-        elif event.type == pygame.KEYDOWN:
+            self.hover = self.row_at(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            idx = self.row_at(event.pos)
+            if idx is not None:
+                self.curr_sel = idx
+                self._clamp()
+        elif event.type == pygame.KEYDOWN and self.items:
             if event.key == pygame.K_DOWN:
-                self.curr_sel += 1
-                self._clamp()
+                self.curr_sel = (0 if self.curr_sel < 0
+                                 else min(len(self.items) - 1, self.curr_sel + 1))
             elif event.key == pygame.K_UP:
-                self.curr_sel -= 1
-                self._clamp()
+                self.curr_sel = max(0, self.curr_sel - 1)
+            self._clamp()
 
     def on_draw(self):
         pygame.draw.rect(self.game.canvas, (14, 14, 18), self.rect, border_radius=3)
@@ -231,11 +262,23 @@ class ListBox:
             idx = self.scroll + row
             if idx >= len(self.items):
                 break
-            row_rect = pygame.Rect(self.rect.x + 4,
-                                   self.rect.y + 4 + row * self.row_h,
-                                   self.rect.width - 8, self.row_h)
-            color = self.bg_sel if idx == self.curr_sel else self.bg
+            row_rect = self._row_rect(row)
+            if idx == self.curr_sel:
+                color = self.bg_sel
+            elif idx == self.hover:
+                color = self.bg_hover
+            else:
+                color = self.bg
             pygame.draw.rect(self.game.canvas, color, row_rect, border_radius=3)
             text = self.font.render(str(self.items[idx]), True, self.fg)
             self.game.canvas.blit(text, (row_rect.x + 8,
                                          row_rect.centery - text.get_height() // 2))
+        # a slim scrollbar when the list overflows
+        if len(self.items) > self.max_rows:
+            inner_h = self.rect.height - 8
+            bar_h = max(24, int(inner_h * self.max_rows / len(self.items)))
+            denom = max(1, len(self.items) - self.max_rows)
+            bar_y = self.rect.y + 4 + int((inner_h - bar_h) * (self.scroll / denom))
+            pygame.draw.rect(self.game.canvas, (150, 150, 150),
+                             pygame.Rect(self.rect.right - 9, bar_y, 4, bar_h),
+                             border_radius=2)

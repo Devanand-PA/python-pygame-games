@@ -84,6 +84,30 @@ def main():
           game.user == "Tester" and game.scene.__module__ == "menus.career_menu")
     check("overlay closed", not game.subscenes)
 
+    # --- user selection screen: picking a saved user must actually work ----
+    game.scene.action_change_user()
+    sel = game.subscenes[-1]
+    check("change user opens selector",
+          sel.__module__ == "menus.user_selection")
+    # Enter with an empty box must be refused with a visible message, not
+    # silently ignored (the old bug: a row looked selected but the box was empty)
+    sel.handle_event(key_event(pygame.K_RETURN))
+    check("empty confirm refused with a message",
+          len(game.subscenes) == 1 and bool(sel.status))
+    # clicking a saved name selects it and copies it into the box
+    idx = sel.userlist.items.index("Tester")
+    row = sel.userlist._row_rect(idx - sel.userlist.scroll)
+    sel.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                        pos=row.center))
+    sel.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                        pos=row.center))
+    check("clicking a saved user fills the name box",
+          sel.input.text == "Tester")
+    sel.handle_event(key_event(pygame.K_RETURN))
+    check("picking a saved user reaches career",
+          not game.subscenes and game.user == "Tester"
+          and game.scene.__module__ == "menus.career_menu")
+
     # settings overlay toggles
     game.scene.action_settings()
     sfx_before = game.settings["sfx"]
