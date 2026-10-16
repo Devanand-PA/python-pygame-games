@@ -1,0 +1,93 @@
+name: Build Big Tower
+
+# Build a fully self-contained Big Tower executable for Linux, Windows and
+# macOS on every push, then publish the archives to the release page under the
+# rolling "bigtower-latest" tag.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: bigtower
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pygame numpy pyinstaller
+
+      - name: Smoke test (headless)
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python tools/flow_test.py
+
+      - name: Build self-contained executable
+        run: python build.py
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigtower-${{ matrix.os }}
+          path: bigtower/dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: bigtower-latest
+          name: "Big Tower — latest build"
+          body: |
+            Automatic build of **Big Tower** from commit `${{ github.sha }}`
+            (branch `${{ github.ref_name }}`).
+
+            Every archive contains a single self-contained executable with the
+            game code, art, audio and maps bundled inside — no loose asset
+            folder required.
+
+            **Linux / macOS:** unzip, then run `chmod +x bigtower && ./bigtower`
+            **Windows:** unzip and run `bigtower.exe`
+          files: dist/*.zip
+          make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
