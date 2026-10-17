@@ -97,14 +97,25 @@ def update_stats(user: str, **deltas) -> dict:
     return stats
 
 
-def record_level_completed(user: str, level_number: int, kills: int, all_levels: int):
-    """Persist a victory; returns the updated stats dict."""
+def record_level_completed(user: str, level_id, kills: int, race_level_ids=None):
+    """Persist a victory on ``level_id``; returns the updated stats dict.
+
+    ``race_level_ids`` is the full ordered list of a race's level ids: when the
+    player has cleared all of them, the campaign counter ticks up.
+    """
     stats = load_stats(user)
     done = set(stats.get("Levels Completed") or [])
-    done.add(level_number)
-    stats["Levels Completed"] = sorted(done)
+    done.add(level_id)
+    stats["Levels Completed"] = sorted(done, key=lambda v: str(v))
     stats["Kills"] = stats.get("Kills", 0) + kills
-    if len(done) >= all_levels:
-        stats["Campaigns Cleared"] = stats.get("Campaigns Cleared", 0) + 1
+    if race_level_ids:
+        race_ids = set(race_level_ids)
+        if race_ids and race_ids.issubset(done):
+            stats["Campaigns Cleared"] = stats.get("Campaigns Cleared", 0) + 1
     save_stats(user, stats)
     return stats
+
+
+def levels_completed(user: str):
+    """The set of cleared level ids for a user."""
+    return set(load_stats(user).get("Levels Completed") or [])

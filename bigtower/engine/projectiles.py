@@ -1,4 +1,9 @@
-"""Projectiles: homing bullets and splash rockets with little boom effects."""
+"""Projectiles: homing bullets and splash rockets, plus little hit/boom effects.
+
+A projectile is fired by *any* unit (defender or attacker) and homes on its
+target.  Splash projectiles damage every opposing unit within their radius, so
+both sides can shell each other.
+"""
 import math
 
 import pygame
@@ -7,29 +12,30 @@ from engine import art
 
 
 class Projectile:
-    def __init__(self, tower, target):
-        self.tower = tower
-        self.pos = [tower.pos[0], tower.pos[1]]
+    def __init__(self, unit, target):
+        self.side = unit.side
+        self.pos = [unit.pos[0], unit.pos[1]]
         self.target = target
         self.last_target_pos = [target.pos[0], target.pos[1]]
-        self.damage = tower.damage
-        self.splash = tower.type.splash
+        self.damage = unit.damage
+        self.splash = unit.type.splash
         self.dead = False
-        if tower.type.projectile == "rocket":
+
+        spec = unit.type.projectile_sprite
+        if spec:
+            self.speed = 300.0 if unit.type.projectile == "rocket" else 460.0
+            self.sprite = art.sprite(spec, 14, unit.tint)
+        elif unit.type.projectile == "rocket":
             self.speed = 300.0
             self.sprite = art.scaled(art.tile(252), (18, 18))
         else:
             self.speed = 460.0
             self.sprite = art.scaled(art.tile(272), (10, 10))
-            if tower.type.key == "snakewatch":
-                self.sprite = art.scaled(art.tile(273), (12, 12))
-            elif tower.type.key == "scorpion":
-                self.sprite = art.scaled(art.tile(272), (8, 8))
 
-    def update(self, dt, enemies, effects):
+    def update(self, dt, targets, effects):
+        """Home toward the target; on arrival damage it (or splash ``targets``)."""
         if self.dead:
             return
-        # home in while the target lives, else fly to its last known spot
         if self.target is not None and self.target.alive:
             self.last_target_pos = [self.target.pos[0], self.target.pos[1]]
         tx, ty = self.last_target_pos
@@ -37,25 +43,26 @@ class Projectile:
         dist = math.hypot(dx, dy)
         step = self.speed * dt
         if dist <= max(step, 6):
-            self._hit(enemies, effects)
+            self._hit(targets, effects)
             return
         self.pos[0] += dx / dist * step
         self.pos[1] += dy / dist * step
 
-    def _hit(self, enemies, effects):
+    def _hit(self, targets, effects):
         self.dead = True
         if self.splash:
             effects.append(("boom", list(self.pos)))
-            for enemy in enemies:
-                if not enemy.alive:
+            for unit in targets:
+                if not unit.alive:
                     continue
-                d = math.hypot(enemy.pos[0] - self.pos[0],
-                               enemy.pos[1] - self.pos[1])
+                d = math.hypot(unit.pos[0] - self.pos[0],
+                               unit.pos[1] - self.pos[1])
                 if d <= self.splash:
-                    enemy.take_hit(self.damage)
+                    unit.take_hit(self.damage)
         else:
             if self.target is not None and self.target.alive:
                 self.target.take_hit(self.damage)
+                effects.append(("hit", list(self.pos)))
 
     def draw(self, canvas):
         if self.dead:
@@ -66,23 +73,33 @@ class Projectile:
 
 
 class Effects:
-    """Simple expanding-ring / fading-puff effects."""
+    """Expanding-ring / fading-puff effects (``boom`` and ``hit``)."""
+
+    LIFE = {"boom": 0.35, "hit": 0.16}
 
     def __init__(self):
         self.items = []
 
     def append(self, effect):
         kind, pos = effect
-        self.items.append({"kind": kind, "pos": pos, "t": 0.0})
+        self.items.append({"kind": kind, "pos": list(pos), "t": 0.0})
 
     def update(self, dt):
         for item in self.items:
             item["t"] += dt
-        self.items = [i for i in self.items if i["t"] < 0.35]
+        self.items = [i for i in self.items
+                      if i["t"] < self.LIFE.get(i["kind"], 0.35)]
 
     def draw(self, canvas):
         for item in self.items:
-            frac = item["t"] / 0.35
+            life = self.LIFE.get(item["kind"], 0.35)
+            frac = item["t"] / life
+            if item["kind"] == "hit":
+                radius = int(4 + 14 * frac)
+                alpha = max(0, int(200 * (1 - frac)))
+                pygame.draw.circle(canvas, (255, 240, 190, alpha), item["pos"],
+                                   radius, 2)
+                continue
             radius = int(8 + 40 * frac)
             alpha = max(0, int(180 * (1 - frac)))
             ring = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)

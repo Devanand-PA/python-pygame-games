@@ -5,7 +5,7 @@ import gui_utils.insults as insults
 class Scene :
     def __init__(self,game) :
         self.game = game
-        self.dt = game.clock.tick(60) / 1000.0
+        self.dt = game.dt
         self.scene_name = "scenes.scene_1"
         self.scene_type = "Game"
         from scenes.options_screen import Scene as options_screen
@@ -64,33 +64,31 @@ class Scene :
 
     def handle_collisions(self,ball,block) :
                     #============ Block Collision =========================
-                    edges = [   [ self.breakable_blocks[block].hitbox.x , 0 ] ,
-                                [ 0 , self.breakable_blocks[block].hitbox.y ] , 
-                                [ self.breakable_blocks[block].hitbox.x + self.breakable_blocks[block].hitbox.width  , 0],
-                                [ 0, self.breakable_blocks[block].hitbox.y + self.breakable_blocks[block].hitbox.height ]  ]
-                    
-                    curr_pos = [ ball.hitbox.x , ball.hitbox.y ]
-                    d_list = []
+                    # Reliable reflection: push the ball out of the block
+                    # along the axis of least penetration, then flip that
+                    # velocity component.
+                    block_rect = self.breakable_blocks[block].hitbox
+                    overlap_left    = ball.hitbox.right  - block_rect.left
+                    overlap_right   = block_rect.right   - ball.hitbox.left
+                    overlap_top     = ball.hitbox.bottom - block_rect.top
+                    overlap_bottom  = block_rect.bottom  - ball.hitbox.top
 
-
-                    for edge in edges :
-                        dist = 0
-                        for comp in range(len(edge)) :
-                            if edge[comp] :
-                                dist = abs(curr_pos[comp] - (ball.vel[comp]// 3) - edge[comp])
-
-                                d_list.append({
-                                "dx" : dist,
-                                "invert" : [comp, 0]
-                                    })
-
-                    k = 0
-                    for d in range(len(d_list)) :
-                        if d_list[d]["dx"] < d_list[k]["dx"] :
-                            k = d
-                    min_d = d_list[k]
-                    min_d["invert"][1] = int(k>1) or -1
-                    ball.vel[min_d["invert"][0]] = min_d["invert"][1]* abs(ball.vel[min_d["invert"][0]] + ball.accel)
+                    if min(overlap_left, overlap_right) < min(overlap_top, overlap_bottom) :
+                        # Horizontal hit
+                        if overlap_left < overlap_right :
+                            ball.hitbox.right = block_rect.left
+                        else :
+                            ball.hitbox.left = block_rect.right
+                        if ball.vel[0] :
+                            ball.vel[0] = -ball.vel[0]
+                    else :
+                        # Vertical hit
+                        if overlap_top < overlap_bottom :
+                            ball.hitbox.bottom = block_rect.top
+                        else :
+                            ball.hitbox.top = block_rect.bottom
+                        if ball.vel[1] :
+                            ball.vel[1] = -ball.vel[1]
                     #========================================================
 
 
@@ -116,12 +114,12 @@ class Scene :
             
     
     def update_game(self) :
-                self.dt = self.game.clock.tick(60) / 1000.0
+                self.dt = self.game.dt
                 ##============ Game Loop========
                 for ball in self.balls :
                     ball.update(self.dt)
                 for buff in self.buffs :
-                    buff.update()
+                    buff.update(self.dt)
                 self.paddle.update()
                 self.update_breakable_blocks()
                 self.handle_buffs()
@@ -142,7 +140,7 @@ class Scene :
 
 
         for ball_no in range(len(self.balls ) -1, -1 , -1) :
-            if self.balls[ball_no].hitbox.y > ( self.game.screen_size[0] ) :
+            if self.balls[ball_no].hitbox.y > ( self.game.screen_size[1] ) :
                 self.balls.pop(ball_no)
 
 
@@ -198,7 +196,7 @@ class Scene :
             self.difficulty_chooser.handle_keypress()
 
         elif not self.scene_paused :
-            self.paddle.handle_keypress()
+            self.paddle.handle_keypress(self.game.dt)
 
 
     def handle_difficulty_chooser(self) :
@@ -206,7 +204,9 @@ class Scene :
             self.difficulty_chooser.draw()
 
     def update_savedata(self) :
-        import json
+        import json, os
+        os.makedirs("saves", exist_ok=True)
+
         savedata = {
                 "balls" : [
                     { "position" : [ ball.hitbox.x , ball.hitbox.y ] ,
@@ -238,8 +238,9 @@ class Scene :
         self.difficulty_chooser.enabled = False
         self.scene_paused = False
         self.options_screen_enabled = False
-        if self.game.difficulty_level :
-                self.initialization_stage = 1
+        # Balls are already initialised (incl. speed/gravity) in Ball.__init__
+        # and velocities were restored from the save – don't re-randomise them.
+        self.initialization_stage = 2
 
     def handle_gameloop(self) :
         self.paddle.draw()

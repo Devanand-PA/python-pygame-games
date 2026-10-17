@@ -15,9 +15,112 @@ window, so the game looks consistent at any window size. `F11` toggles
 fullscreen.
 
 Flow: Main menu -> pick/create a player -> Career hub -> Play Campaign ->
-Select Level -> defend the base. Placing towers costs gold (kill enemies to
-earn more), right-click cancels the current selection, and `Space` calls the
-next wave early for a bonus. Progress is saved per player.
+choose a race/campaign -> Select Level -> defend the base. Placing towers costs
+gold (kill enemies to earn more), right-click cancels the current selection, and
+`Space` calls the next wave early for a bonus. Progress is saved per player.
+
+## Content, races and campaigns
+
+The game is data-driven: terrain, units, races (campaigns) and levels all live
+as editable JSON under `content/`:
+
+```
+content/
+    terrain.json           the terrain palette (grid character -> tiles + flags)
+    units/<unit_id>.json   every unit, defender *and* attacker, one schema
+    races/<race_id>.json   a campaign: defender roster, enemy roster, levels
+    levels/<level_id>.json grid, economy, available units, enemy pool, waves
+```
+
+A **race** is a campaign (e.g. *Woodlanders*, *The Brood* / aliens, *Iron
+Legion* / machines). Each race offers a different set of defender units and
+faces a different set of attackers, and owns an ordered list of levels.
+
+A **unit** is fully customisable and uses one schema for both sides. Key fields:
+
+- `side`: `defender` (placed by the player, a "tower") or `attacker` (spawned
+  by waves).
+- `movement`: `static` (classic turret) | `chase` (a defender, e.g. the
+  Scorpion, walks after the nearest enemy) | `route` (attacker follows the map
+  path) | `direct` (flies straight at the base) | `hunt` (leaves the path to
+  chase a defender).
+- `attack`: `none` | `melee` | `projectile` -- attacking units fight back, so
+  **enemies damage towers too**.
+- `sprite` / `projectile_sprite`: a *sprite spec* (see below), plus an optional
+  `tint` that overrides the race tint.
+
+### Sprites and animation
+
+You can point units **and** terrain at your own art, with animation. Dropping a
+PNG under `assets/` is enough -- the designer's built-in file browser lists them,
+and `terrain.json`/`units/*.json` reference them by relative path. A sprite spec
+is one of:
+
+```json
+{"kind": "pack",  "tile": 226}
+{"kind": "image", "path": "units/foo/bar.png"}
+{"kind": "shape", "shape": "circle", "color": [200, 120, 120]}
+{"kind": "sheet", "path": "units/foo.png", "frame_w": 32, "frame_h": 32,
+ "frames": 6, "fps": 8, "loop": true, "margin": 0, "spacing": 0}
+{"kind": "anim",  "fps": 8, "loop": true, "frames": [ <spec>, <spec>, ... ]}
+{"kind": "sprites",                                    // animated unit art
+ "image": {"kind": "image", "path": "units/foo.png"},  // static fallback
+ "animations": {
+   "idle":  {"kind": "sheet", "path": "units/foo.png", "frame_w": 32,
+             "frame_h": 32, "frames": [0, 1], "fps": 6, "loop": true},
+   "walk":  {"kind": "sheet", "path": "units/foo.png", "frame_w": 32,
+             "frame_h": 32, "frames": [2, 3, 4], "fps": 10, "loop": true},
+   "attack": {"kind": "sheet", "path": "units/foo.png", "frames": [5],
+              "frame_w": 32, "frame_h": 32, "fps": 12, "loop": false}
+ }}
+```
+
+- `sheet` slices a spritesheet left-to-right, then top-to-bottom (optionally
+  with `cols`/`rows`/`margin`/`spacing`). Its `frames` is a count **or** an
+  explicit list of frame indices.
+- `anim` is an explicit list of frames, each any other spec.
+- `sprites` is the animated unit sprite: named states (`idle`, `walk`, `attack`,
+  `death`) cut from one spritesheet, plus an optional static `image` used for any
+  state that has no animation. The game plays the matching state automatically
+  (still -> `idle`, moving -> `walk`, firing -> `attack`, killed -> `death`) and
+  falls back to `idle` / the `image` when a state is missing.
+- Terrain uses the same specs for its `sprite` (ground) and optional
+  `overlay_sprite` (rocks, bushes, decals), so animated water/lava/etc. work
+  (terrain animates as a single looping `sheet`/`image`).
+- Units and animated terrain tiles animate in-game; frames are resolved by
+  `engine.art` (`sprite_frames`, `frame_index`, `fps`, `frame_count`, each taking
+  an optional animation `name`).
+
+Levels pick a subset of the race's units (`available_units`, the level's shop)
+and attackers (`enemy_pool`), then define `waves` (each a list of
+`[unit_id, count, spawn_interval]` groups). The spawn `S` and base `B`
+characters are reserved; ground routes are found automatically by a breadth-first
+search from `S` to `B`, so branching maps work.
+
+## Level designer
+
+`designer.py` is a standalone pygame app for authoring everything above without
+touching Python or JSON by hand:
+
+```sh
+.venv/bin/python designer.py
+```
+
+It has five tabs -- **Terrain**, **Units**, **Races**, **Levels** and **Help**.
+The Levels tab lets you paint the map (left-click paints, right-click erases,
+and clicking a palette swatch chooses the brush, including the `S` spawn and
+`B` base), previews the spawn->base route (warns if there is none), picks the
+level's shop and enemy pool, and builds waves.
+
+To set art, **click the sprite preview** on the Units or Terrain tab. You are
+asked whether the sprite is a **static image** or an **animation**; either way a
+built-in file browser opens so you can navigate `assets/` and pick a PNG (or
+spritesheet). For an animation, the animation editor shows the sheet as a grid
+of numbered frames -- choose a state (`idle` / `walk` / `attack` / `death`, or a
+single looping clip for terrain), set its `fps` and `loop`, then click frames to
+assign them (shift-click adds a range). A static image can be kept as the
+fallback for states without an animation. Everything saves back to the same
+`content/` JSON the game reads.
 
 ## Status
 
@@ -32,8 +135,8 @@ SDL_VIDEODRIVER=dummy .venv/bin/python tools/flow_test.py   # logic + persistenc
 
 ## Building a release
 
-`build.sh` bundles the game code, every asset and all maps *inside* a single
-`--onefile` executable, then zips it for distribution:
+`build.sh` bundles the game code, every asset, all maps and all content JSON
+*inside* a single `--onefile` executable, then zips it for distribution:
 
 ```sh
 ./build.sh
@@ -81,6 +184,11 @@ in Windows.
 [x] Write the engine (pygame port lives in core/, engine/, gui/, menus/)
 [x] Playable career menu, level select with unlock progress and saved stats
 [x] 3 playable campaign levels with towers, enemies, waves, win/lose flow
+[x] Data-driven content: terrain, units, races and levels authored as JSON
+[x] Race-based campaigns (Woodlanders, aliens, machines) with per-race rosters
+[x] Fully customisable units (movement, attack, sprite, tint)
+[x] Enemies that attack towers (two-way combat); melee chaser defenders
+[x] Standalone level/unit designer GUI (designer.py)
 [x] Figure out how to get mouse click to work on the menus
 [x] Make an input field class for the username and other things that you might need
 

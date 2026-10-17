@@ -20,6 +20,12 @@ ASSETS_DIR = BASE_DIR / "assets"
 MAPS_DIR = BASE_DIR / "maps"
 PACK_DIR = ASSETS_DIR / "packs" / "kenney_tower-defense-top-down" / "PNG" / "Default size"
 
+# Content (races, units, levels, terrain) is data, not code: it lives in JSON
+# files so the standalone level designer can author it without touching Python.
+# BIGTOWER_CONTENT_DIR lets tests / packagers point the game somewhere else.
+CONTENT_DIR = pathlib.Path(
+    os.environ.get("BIGTOWER_CONTENT_DIR", BASE_DIR / "content"))
+
 
 def asset(*parts) -> pathlib.Path:
     """Absolute path to a file under assets/."""
@@ -28,6 +34,15 @@ def asset(*parts) -> pathlib.Path:
 
 def map_file(name: str) -> pathlib.Path:
     return MAPS_DIR / name
+
+
+def content_dir() -> pathlib.Path:
+    """Directory holding the editable game content (JSON)."""
+    return CONTENT_DIR
+
+
+def content_file(*parts) -> pathlib.Path:
+    return content_dir().joinpath(*parts)
 
 
 # --------------------------------------------------------------------------

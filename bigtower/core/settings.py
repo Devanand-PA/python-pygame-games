@@ -32,4 +32,12 @@ START_LIVES_DEFAULT = 20
 WAVE_COUNTDOWN = 20.0      # seconds between waves (auto start)
 EARLY_CALL_BONUS = 2       # gold per second remaining when calling a wave early
 SELL_RATIO = 0.7           # refund fraction of total invested
-TOWER_MAX_LEVEL = 3
+
+# --- Unit upgrades ---------------------------------------------------------
+# Defenders (player units) can be upgraded in place; these are the per-level
+# multipliers applied to their base stats.  Attackers scale per wave instead.
+UNIT_MAX_LEVEL = 3
+UNIT_DAMAGE_GAIN = 1.6
+UNIT_RANGE_GAIN = 1.12
+UNIT_RATE_GAIN = 0.82
+UNIT_HP_GAIN = 1.25

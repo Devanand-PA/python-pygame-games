@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -53,26 +54,31 @@ def main():
     overlay.confirm()
     snap(game, "03_career")
 
-    # 4. level select
+    # 4. campaign select
     game.scene.action_play()
-    snap(game, "04_level_select")
+    campaign = game.subscenes[-1]
+    snap(game, "04_campaign_select")
 
-    # 5. game with towers + enemies mid-wave
-    game.subscenes[-1]._launch(0)
+    # 5. level select
+    campaign._launch(campaign.races[0])
+    level_sel = game.subscenes[-1]
+    snap(game, "05_level_select")
+
+    # 6. game with units + enemies mid-wave
+    level_id = level_sel.levels[0]["id"]
+    level_sel._launch(level_id)
     scene = game.scene
     scene.gold += 800
-    from engine.towers import TOWER_TYPES
     spots = []
     for cell in scene.level.path_cells:
         for adj in ((cell[0] + 1, cell[1]), (cell[0], cell[1] + 1),
                     (cell[0] - 1, cell[1]), (cell[0], cell[1] - 1)):
-            if scene.level.is_buildable(*adj) and adj not in scene.towers:
+            if scene.level.is_buildable(*adj) and adj not in scene.towers_by_cell:
                 spots.append(adj)
         if len(spots) >= 8:
             break
     for i, spot in enumerate(spots[:8]):
-        ttower = TOWER_TYPES[i % 4]
-        scene.selected_shop = ttower
+        scene.selected_shop = scene.shop_units[i % len(scene.shop_units)]
         scene._try_place(spot)
     scene.selected_shop = None
     scene.first_wave_pending = False
@@ -81,36 +87,41 @@ def main():
         if scene.state in ("won", "lost"):
             break
         game.on_update(1 / 60)
-    snap(game, "05_battle")
+    snap(game, "06_battle")
 
-    # 6. tower selected -> info panel
-    scene.selected_tower = next(iter(scene.towers.values()))
-    snap(game, "06_panel")
-    scene.selected_tower = None
+    # 7. unit selected -> info panel
+    scene.selected_unit = next(iter(scene.towers_by_cell.values()))
+    snap(game, "07_panel")
+    scene.selected_unit = None
 
-    # 7. pause overlay
+    # 8. pause overlay
     from menus.pause_overlay import Scene as Pause
     game.subscenes.append(Pause(game, scene))
-    snap(game, "07_pause")
+    snap(game, "08_pause")
     game.subscenes.pop()
 
-    # 8. settings overlay
+    # 9. settings overlay
     from menus.settings_overlay import Scene as Settings
     game.subscenes.append(Settings(game))
-    snap(game, "08_settings")
+    snap(game, "09_settings")
     game.subscenes.pop()
 
-    # 9. victory screen (force)
+    # 10. victory screen (force)
     scene.state = "won"
-    snap(game, "09_victory")
+    snap(game, "10_victory")
 
-    # 10. ghost placement
-    scene2 = type(scene)(game, 2)
+    # 11. ghost placement on an alien map
+    from core.content import get_content
+    from engine.game_scene import GameScene
+    content = get_content()
+    alien_race = content.race("aliens")
+    alien_level = content.race_levels(alien_race)[0]["id"]
+    scene2 = GameScene(game, alien_level)
     game.scene = scene2
     scene2.gold = 500
-    scene2.selected_shop = TOWER_TYPES[3]
-    scene2.mouse_pos = scene2.level.cell_center((9, 0))
-    snap(game, "10_ghost")
+    scene2.selected_shop = scene2.shop_units[-1]
+    scene2.mouse_pos = scene2.level.cell_center((9, 4))
+    snap(game, "11_ghost_alien")
 
     print("done")
 

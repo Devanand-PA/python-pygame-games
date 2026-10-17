@@ -1,7 +1,8 @@
-"""Level select overlay: campaign levels on a list, locked ones greyed."""
+"""Level select overlay: a race's levels, with locked ones greyed out."""
 import pygame
 
 from core import savestate
+from core.content import get_content
 from core.scene import Scene
 from gui.widgets import Button
 
@@ -9,37 +10,38 @@ from gui.widgets import Button
 class Scene(Scene):
     scene_type = "menu"
 
-    def __init__(self, game, levels):
+    def __init__(self, game, race):
         super().__init__(game)
-        self.levels = levels
-        self.box = pygame.Rect(0, 0, 520, 120 + 64 * len(levels) + 70)
+        self.content = get_content()
+        self.race = race or {}
+        self.levels = self.content.race_levels(self.race)
+        self.box = pygame.Rect(0, 0, 560, 150 + 64 * max(1, len(self.levels)) + 70)
         self.box.center = (game.canvas.get_width() // 2,
                            game.canvas.get_height() // 2)
-        self.title = game.fonts["big"].render("Select Level", True, (250, 250, 240))
+        self.title = game.fonts["big"].render(
+            "{} - Select Level".format(self.race.get("name", "Campaign")),
+            True, tuple(self.race.get("color") or (250, 250, 240)))
 
-        stats = savestate.load_stats(game.user or "Player")
-        completed = set(stats.get("Levels Completed") or [])
+        completed = savestate.levels_completed(game.user or "Player")
         self.buttons = []
-        y = self.box.y + 76
-        unlocked_next = 1
-        for idx, level in enumerate(levels, start=1):
-            # a level is playable when it is level 1 or the previous one is done
-            unlocked = (idx == 1) or (idx - 1 in completed)
-            if idx in completed:
+        y = self.box.y + 86
+        for idx, level in enumerate(self.levels):
+            unlocked = (idx == 0) or (self.levels[idx - 1]["id"] in completed)
+            if level["id"] in completed:
                 suffix = "  (cleared)"
             elif unlocked:
                 suffix = ""
             else:
                 suffix = "  (locked)"
             btn = Button(game, (self.box.x + 40, y), (self.box.width - 80, 52),
-                         text="{} - {}{}".format(idx, level["name"], suffix),
+                         text="{} - {}{}".format(idx + 1, level.get("name", level["id"]),
+                                                 suffix),
                          disabled=not unlocked)
-            btn.level_index = idx - 1
+            btn.level_id = level["id"]
             if unlocked:
                 btn.function = self._make_launcher(btn)
-                if unlocked_next == idx:
+                if not any(b.sel for b in self.buttons):
                     btn.sel = True
-                    unlocked_next = -1
             self.buttons.append(btn)
             y += 64
         self.back_btn = Button(game, (self.box.x + 40, y + 6),
@@ -49,14 +51,14 @@ class Scene(Scene):
 
     def _make_launcher(self, btn):
         def launch():
-            self._launch(btn.level_index)
+            self._launch(btn.level_id)
         return launch
 
-    def _launch(self, level_index):
+    def _launch(self, level_id):
         from engine.game_scene import GameScene
         if self in self.game.subscenes:
             self.game.subscenes.remove(self)
-        self.game.scene = GameScene(self.game, level_index)
+        self.game.scene = GameScene(self.game, level_id)
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -98,6 +100,6 @@ class Scene(Scene):
         pygame.draw.rect(self.game.canvas, (90, 86, 120), self.box, 3, border_radius=10)
         self.game.canvas.blit(self.title,
                               self.title.get_rect(midtop=(self.box.centerx,
-                                                          self.box.y + 16)))
+                                                          self.box.y + 18)))
         for b in self.buttons:
             b.on_draw()

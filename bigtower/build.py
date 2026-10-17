@@ -34,20 +34,19 @@ NAME = "bigtower"
 # PyInstaller's static analysis can occasionally miss them.  Listing them
 # explicitly guarantees a complete frozen build.
 HIDDEN_IMPORTS = [
+    "core.content",
     "core.game",
     "core.paths",
     "core.savestate",
     "core.scene",
     "core.settings",
     "engine.art",
-    "engine.enemies",
     "engine.game_scene",
     "engine.level",
-    "engine.levels",
     "engine.projectiles",
-    "engine.towers",
-    "engine.unit_engine",
+    "engine.units",
     "gui.widgets",
+    "menus.campaign_select",
     "menus.career_menu",
     "menus.common",
     "menus.level_select",
@@ -99,7 +98,8 @@ def main() -> int:
 
     assets = ROOT / "assets"
     maps = ROOT / "maps"
-    missing = [p.name for p in (assets, maps) if not p.is_dir()]
+    content = ROOT / "content"
+    missing = [p.name for p in (assets, maps, content) if not p.is_dir()]
     if missing:
         sys.stderr.write(
             "Expected {} next to build.py; run the build from the bigtower "
@@ -117,6 +117,7 @@ def main() -> int:
         "--paths", str(ROOT),
         "--add-data", _data_arg(assets),
         "--add-data", _data_arg(maps),
+        "--add-data", _data_arg(content),
     ]
     for module in HIDDEN_IMPORTS:
         cmd += ["--hidden-import", module]

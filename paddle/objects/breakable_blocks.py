@@ -27,8 +27,8 @@ class Block :
 
         if not self.hitbox :
             self.dimensions = [ random.randint(30, self.game.screen_size[0] // 10) , random.randint(30, self.game.screen_size[1] // 10) ]
-            self.coords = [ random.randint(20, self.game.screen_size[0] - 20) , 
-                           random.randint(10,self.game.screen_size[1] - 10*self.parent_scene.paddle.hitbox.height)  ]
+            self.coords = [ random.randint(20, max(21, self.game.screen_size[0] - 20 - self.dimensions[0])) , 
+                           random.randint(10,max(11,self.game.screen_size[1] - 10*self.parent_scene.paddle.hitbox.height))  ]
             self.hitbox =  pygame.Rect(
                     self.coords[0], self.coords[1] , self.dimensions[0]  , self.dimensions[1]
                             )

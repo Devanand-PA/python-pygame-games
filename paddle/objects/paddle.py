@@ -13,16 +13,20 @@ class Paddle :
     def update(self) :
        pass
    
-    def handle_keypress(self) :
+    def handle_keypress(self,dt=None) :
+        if dt is None :
+            dt = 1/60
+        speed = 600 * dt  # pixels per second
+
         pressed_keys = pygame.key.get_pressed()
 
         if pressed_keys[pygame.K_d] or pressed_keys[pygame.K_RIGHT]:
-            self.hitbox.x += self.hitbox.width // 10
+            self.hitbox.x += int(speed)
             if self.hitbox.x > self.game.screen_size[0] - self.hitbox.width :
                 self.hitbox.x = self.game.screen_size[0] - self.hitbox.width
 
         if pressed_keys[pygame.K_a] or pressed_keys[pygame.K_LEFT]:
-            self.hitbox.x -= self.hitbox.width // 10
+            self.hitbox.x -= int(speed)
             if self.hitbox.x < 0 :
                 self.hitbox.x = 0
 

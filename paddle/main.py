@@ -17,6 +17,7 @@ class Game :
         pygame.display.set_caption("paddle")
 
         self.clock = pygame.time.Clock()
+        self.dt = 1/60  # seconds per frame; overwritten in run()
         self.default_font = pygame.font.Font(None, 30)
         self.title_font_size = 60
         self.title_font = pygame.font.Font(None, self.title_font_size)
@@ -29,11 +30,12 @@ class Game :
     def run(self) :
         self.running = True
         while self.running :
+            # Tick once per frame; all code uses this single dt value.
+            self.dt = self.clock.tick(120) / 1000.0
             self.scene.update()
             self.scene.draw()
             pygame.display.flip()
-            self.clock.tick(120)
-            
+
             for event in pygame.event.get() :
                 if event.type == pygame.QUIT :
                     self.running = False
@@ -55,8 +57,11 @@ class Game :
             os.mkdir('saves')
 
         import json
-        with open('saves/test.save') as savedata :
-            savedata = json.load(savedata)
+        try :
+            with open('saves/test.save') as savedata :
+                savedata = json.load(savedata)
+        except (FileNotFoundError, json.JSONDecodeError) :
+            return  # no (valid) save file – keep the current scene
 
         if hasattr(self.scene,"load_savedata") :
             self.scene.load_savedata(savedata)

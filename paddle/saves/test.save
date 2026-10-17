@@ -1,1 +1,1 @@
-{"balls": [{"position": [1310, 806], "velocity": [-10.077420510481724, -17.27557801796867]}], "paddle": {"position": 1160}, "scene": "scenes.scene_1", "difficulty_level": "Normal"}
+{"balls": [], "paddle": {"position": 412}, "scene": "scenes.scene_1", "difficulty_level": "Normal"}

@@ -1,6 +1,7 @@
 import pygame
 import math
 import random
+import time
 
 class Ball :
     def __init__(self,game,parent_scene,dt) :
@@ -81,9 +82,11 @@ class Ball :
     def update(self,dt) :
         self.vel[1] = self.vel[1] * self.dissipation
         if (self.hitbox.x < 0) :
+            self.hitbox.x = 0
             self.vel[0] = abs(self.vel[0] + self.accel)
 
         elif (self.hitbox.x > (self.game.screen_size[0] - self.hitbox.width) ) :
+            self.hitbox.x = self.game.screen_size[0] - self.hitbox.width
             self.vel[0] = -1*abs(self.vel[0] + self.accel)
 
         self.delta_t = dt  # seconds
@@ -91,7 +94,13 @@ class Ball :
 
         if self.hitbox.colliderect(self.parent_scene.paddle.hitbox) :
             self.vel[1] = -1 * abs(self.vel[1]  + self.accel) + random.randint(-1,1)
-            self.vel[0] += random.randint(-1,1)
+            # Aim the ball away from the paddle centre based on where it hit,
+            # so it doesn't just go straight up every time.
+            offset = (self.hitbox.centerx - self.parent_scene.paddle.hitbox.centerx) / (self.parent_scene.paddle.hitbox.width / 2)
+            offset = max(-0.8, min(0.8, offset))
+            self.vel[0] += int(self.speed * offset * 0.5)
+            # Push the ball above the paddle so they don't remain overlapping
+            self.hitbox.bottom = self.parent_scene.paddle.hitbox.top
         
         if self.gravity_enabled :
             self.handle_gravity()
@@ -111,7 +120,6 @@ class Ball :
         
 
         if self.fireball_timer > 0 :
-            import time
             if ( time.perf_counter() - self.fireball_timer ) > 10 :
                 self.fireball = False
                 self.fireball_timer = 0

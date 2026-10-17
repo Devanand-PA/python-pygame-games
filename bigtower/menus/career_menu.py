@@ -38,17 +38,23 @@ class Scene(MenuPage, Scene):
                 True, (240, 240, 230))
             for key in ("Campaigns Cleared", "Kills")
         ]
-        done = self.stats.get("Levels Completed") or []
-        levels_line = "Levels cleared: {}".format(
-            ", ".join(str(n) for n in done) if done else "none yet")
-        self.stat_lines.append(
-            game.fonts["default"].render(levels_line, True, (240, 240, 230)))
+        from core.content import get_content
+        content = get_content()
+        done = set(self.stats.get("Levels Completed") or [])
+        self.stat_lines.append(game.fonts["small"].render(
+            "Progress by campaign:", True, (200, 200, 190)))
+        for race in content.sorted_races():
+            levels = content.race_levels(race)
+            cleared = sum(1 for lv in levels if lv["id"] in done)
+            line = "  {} - {}/{}".format(race.get("name", race["id"]),
+                                         cleared, len(levels))
+            self.stat_lines.append(game.fonts["default"].render(line, True,
+                                                                (240, 240, 230)))
 
     # ---------------------------------------------------------------- actions
     def action_play(self):
-        from engine.levels import LEVELS
-        from menus.level_select import Scene as LevelSelect
-        self.push_overlay(LevelSelect(self.game, LEVELS))
+        from menus.campaign_select import Scene as Campaign
+        self.push_overlay(Campaign(self.game))
 
     def action_settings(self):
         from menus.settings_overlay import Scene as Settings

@@ -17,10 +17,7 @@ class Buff :
         elif self.buff == "Fireball" :
             self.color = (200,0,0)
 
-
-
-
-        self.delta_t = self.game.clock.tick(60) / 1000.0  # seconds
+        self.fall_speed = 300  # pixels per second
 
 
     def handle_keypress(self) :
@@ -28,8 +25,10 @@ class Buff :
 
 
 
-    def update(self) :
-        self.hitbox.y += 50
+    def update(self,dt=None) :
+        if dt is None :
+            dt = 1/60
+        self.hitbox.y += self.fall_speed * dt
 
         
 
