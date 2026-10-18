@@ -1,0 +1,86 @@
+{
+  "id": "aliens_1",
+  "name": "First Contact",
+  "race": "aliens",
+  "grid": [
+    "ggtgggggggggggggtggg",
+    "gggggggggggggggggggg",
+    "S.............gggggg",
+    "ggggggggggggg.gggggg",
+    "ggggggggggggg.gggggg",
+    "ggggggggggggg.gggggg",
+    "gggg..........gggggg",
+    "gggg.ggggggggggggggg",
+    "gggg...............B",
+    "gtgggggggggggggggtgg"
+  ],
+  "gold": 300,
+  "lives": 20,
+  "available_units": [
+    "gun",
+    "cannon",
+    "frost",
+    "scorpion"
+  ],
+  "enemy_pool": [
+    "fast",
+    "flyer",
+    "hunter",
+    "spitter"
+  ],
+  "waves": [
+    [
+      [
+        "fast",
+        8,
+        0.6
+      ],
+      [
+        "flyer",
+        4,
+        0.9
+      ]
+    ],
+    [
+      [
+        "flyer",
+        6,
+        0.7
+      ],
+      [
+        "spitter",
+        5,
+        0.9
+      ]
+    ],
+    [
+      [
+        "hunter",
+        4,
+        1.1
+      ],
+      [
+        "fast",
+        10,
+        0.4
+      ]
+    ],
+    [
+      [
+        "hunter",
+        6,
+        0.9
+      ],
+      [
+        "flyer",
+        6,
+        0.6
+      ],
+      [
+        "spitter",
+        5,
+        0.8
+      ]
+    ]
+  ]
+}

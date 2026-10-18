@@ -1,0 +1,32 @@
+{
+  "id": "woodlanders",
+  "name": "Woodlanders",
+  "order": 0,
+  "color": [
+    150,
+    220,
+    140
+  ],
+  "tint": [
+    180,
+    240,
+    180
+  ],
+  "units": [
+    "gun",
+    "cannon",
+    "sniper",
+    "scorpion",
+    "snakewatch"
+  ],
+  "enemies": [
+    "runner",
+    "fast",
+    "armored"
+  ],
+  "levels": [
+    "woodlanders_1",
+    "woodlanders_2",
+    "woodlanders_3"
+  ]
+}

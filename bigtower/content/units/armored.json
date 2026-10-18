@@ -1,0 +1,25 @@
+{
+  "id": "armored",
+  "name": "Armored",
+  "side": "attacker",
+  "movement": "route",
+  "attack": "melee",
+  "sprite_scale": 0.8,
+  "speed": 44,
+  "hp": 240,
+  "bounty": 18,
+  "damage_to_base": 5,
+  "damage": 12,
+  "range": 42,
+  "cooldown": 1.0,
+  "sound": "sting",
+  "sprite": {
+    "kind": "shape",
+    "shape": "square",
+    "color": [
+      120,
+      140,
+      170
+    ]
+  }
+}

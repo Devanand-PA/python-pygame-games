@@ -1,0 +1,76 @@
+{
+  "id": "woodlanders_1",
+  "name": "Greenfield Road",
+  "race": "woodlanders",
+  "grid": [
+    "ggtgggggggggggggtggg",
+    "gggggggggggggggggggg",
+    "S.............gggggg",
+    "ggggggggggggg.gggggg",
+    "ggggggggggggg.gggggg",
+    "ggggggggggggg.gggggg",
+    "gggg..........gggggg",
+    "gggg.ggggggggggggggg",
+    "gggg...............B",
+    "gtgggggggggggggggtgg"
+  ],
+  "gold": 280,
+  "lives": 20,
+  "available_units": [
+    "gun",
+    "cannon",
+    "sniper",
+    "scorpion",
+    "snakewatch"
+  ],
+  "enemy_pool": [
+    "runner",
+    "fast",
+    "armored"
+  ],
+  "waves": [
+    [
+      [
+        "runner",
+        8,
+        0.7
+      ]
+    ],
+    [
+      [
+        "runner",
+        10,
+        0.6
+      ],
+      [
+        "fast",
+        4,
+        0.8
+      ]
+    ],
+    [
+      [
+        "fast",
+        8,
+        0.5
+      ],
+      [
+        "armored",
+        2,
+        1.5
+      ]
+    ],
+    [
+      [
+        "armored",
+        4,
+        1.2
+      ],
+      [
+        "runner",
+        10,
+        0.5
+      ]
+    ]
+  ]
+}

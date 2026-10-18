@@ -1,0 +1,19 @@
+{
+  "id": "gun",
+  "name": "Gun Tower",
+  "side": "defender",
+  "movement": "static",
+  "attack": "projectile",
+  "sprite_scale": 0.9,
+  "projectile": "bullet",
+  "damage": 10,
+  "range": 140,
+  "cooldown": 0.75,
+  "hp": 140,
+  "cost": 50,
+  "sprite": {
+    "kind": "pack",
+    "tile": 226
+  },
+  "sound": "gun"
+}

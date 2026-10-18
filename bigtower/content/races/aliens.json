@@ -1,0 +1,31 @@
+{
+  "id": "aliens",
+  "name": "The Brood",
+  "order": 1,
+  "color": [
+    200,
+    150,
+    255
+  ],
+  "tint": [
+    215,
+    175,
+    255
+  ],
+  "units": [
+    "gun",
+    "cannon",
+    "frost",
+    "scorpion"
+  ],
+  "enemies": [
+    "fast",
+    "flyer",
+    "hunter",
+    "spitter"
+  ],
+  "levels": [
+    "aliens_1",
+    "aliens_2"
+  ]
+}

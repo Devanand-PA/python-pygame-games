@@ -1,0 +1,21 @@
+{
+  "id": "runner",
+  "name": "Runner",
+  "side": "attacker",
+  "movement": "route",
+  "attack": "none",
+  "sprite_scale": 0.8,
+  "speed": 62,
+  "hp": 60,
+  "bounty": 8,
+  "damage_to_base": 2,
+  "sprite": {
+    "kind": "shape",
+    "shape": "circle",
+    "color": [
+      210,
+      80,
+      70
+    ]
+  }
+}

@@ -56,8 +56,9 @@ class Scene(Scene):
 
     def _launch(self, level_id):
         from engine.game_scene import GameScene
-        if self in self.game.subscenes:
-            self.game.subscenes.remove(self)
+        # Starting a battle dismisses the whole menu overlay stack (campaign
+        # select + level select) so the game scene owns input and the screen.
+        self.game.subscenes.clear()
         self.game.scene = GameScene(self.game, level_id)
 
     def handle_event(self, event):

@@ -1,0 +1,25 @@
+{
+  "id": "brute",
+  "name": "Brute",
+  "side": "attacker",
+  "movement": "route",
+  "attack": "melee",
+  "sprite_scale": 0.8,
+  "speed": 34,
+  "hp": 620,
+  "bounty": 42,
+  "damage_to_base": 10,
+  "damage": 34,
+  "range": 48,
+  "cooldown": 1.4,
+  "sound": "sting",
+  "sprite": {
+    "kind": "shape",
+    "shape": "diamond",
+    "color": [
+      150,
+      90,
+      170
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "mortar",
+  "name": "Mortar",
+  "side": "defender",
+  "movement": "static",
+  "attack": "projectile",
+  "sprite_scale": 0.95,
+  "projectile": "rocket",
+  "splash": 64,
+  "damage": 45,
+  "range": 240,
+  "cooldown": 2.6,
+  "hp": 160,
+  "cost": 180,
+  "sprite": {
+    "kind": "pack",
+    "tile": 227
+  },
+  "sound": "missile"
+}

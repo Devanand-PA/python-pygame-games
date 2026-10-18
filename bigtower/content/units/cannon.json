@@ -1,0 +1,20 @@
+{
+  "id": "cannon",
+  "name": "Cannon",
+  "side": "defender",
+  "movement": "static",
+  "attack": "projectile",
+  "sprite_scale": 0.95,
+  "projectile": "rocket",
+  "splash": 52,
+  "damage": 30,
+  "range": 165,
+  "cooldown": 1.7,
+  "hp": 190,
+  "cost": 120,
+  "sprite": {
+    "kind": "pack",
+    "tile": 228
+  },
+  "sound": "missile"
+}

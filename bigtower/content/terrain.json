@@ -1,0 +1,59 @@
+[
+  {
+    "id": "grass",
+    "name": "Grass",
+    "char": "g",
+    "base": 157,
+    "buildable": true,
+    "walkable": false
+  },
+  {
+    "id": "path",
+    "name": "Road",
+    "char": ".",
+    "base": 158,
+    "buildable": false,
+    "walkable": true
+  },
+  {
+    "id": "rock",
+    "name": "Rock",
+    "char": "r",
+    "base": 159,
+    "buildable": false,
+    "walkable": false
+  },
+  {
+    "id": "tree",
+    "name": "Trees",
+    "char": "t",
+    "base": 157,
+    "buildable": false,
+    "walkable": false,
+    "overlay_sprite": {
+      "kind": "pack",
+      "tile": 250
+    }
+  },
+  {
+    "id": "water",
+    "name": "Water",
+    "char": "w",
+    "base": 159,
+    "buildable": false,
+    "walkable": false,
+    "tint": [
+      150,
+      190,
+      255
+    ]
+  },
+  {
+    "id": "sand",
+    "name": "Sand",
+    "char": "s",
+    "base": 160,
+    "buildable": true,
+    "walkable": true
+  }
+]

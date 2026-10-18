@@ -1,0 +1,19 @@
+{
+  "id": "scorpion",
+  "name": "Scorpion",
+  "side": "defender",
+  "movement": "chase",
+  "attack": "melee",
+  "sprite_scale": 1.0,
+  "speed": 78,
+  "damage": 20,
+  "range": 48,
+  "cooldown": 0.8,
+  "hp": 300,
+  "cost": 90,
+  "sprite": {
+    "kind": "image",
+    "path": "units/towers/forest-towers/scorpion-tower/scorpion-001.png"
+  },
+  "sound": "sting"
+}

@@ -1,0 +1,26 @@
+{
+  "id": "spitter",
+  "name": "Spitter",
+  "side": "attacker",
+  "movement": "route",
+  "attack": "projectile",
+  "sprite_scale": 0.8,
+  "speed": 58,
+  "hp": 130,
+  "bounty": 16,
+  "damage_to_base": 3,
+  "projectile": "bullet",
+  "damage": 10,
+  "range": 130,
+  "cooldown": 1.2,
+  "sound": "gun",
+  "sprite": {
+    "kind": "shape",
+    "shape": "circle",
+    "color": [
+      90,
+      200,
+      120
+    ]
+  }
+}

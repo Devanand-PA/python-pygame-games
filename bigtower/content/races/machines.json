@@ -1,0 +1,30 @@
+{
+  "id": "machines",
+  "name": "Iron Legion",
+  "order": 2,
+  "color": [
+    190,
+    200,
+    220
+  ],
+  "tint": [
+    205,
+    215,
+    235
+  ],
+  "units": [
+    "gun",
+    "mortar",
+    "sniper",
+    "cannon"
+  ],
+  "enemies": [
+    "armored",
+    "brute",
+    "hunter"
+  ],
+  "levels": [
+    "machines_1",
+    "machines_2"
+  ]
+}
