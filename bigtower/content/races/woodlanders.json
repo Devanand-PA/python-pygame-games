@@ -3,30 +3,35 @@
   "name": "Woodlanders",
   "order": 0,
   "color": [
-    150,
-    220,
-    140
+    110,
+    200,
+    120
   ],
   "tint": [
-    180,
-    240,
-    180
+    185,
+    255,
+    185
   ],
+  "description": "Forest folk. Cheap swarms of chasers backed by long-range snipers.",
   "units": [
     "gun",
-    "cannon",
-    "sniper",
     "scorpion",
+    "thornling",
+    "spitter",
+    "missile",
     "snakewatch"
   ],
   "enemies": [
+    "grunt",
     "runner",
-    "fast",
-    "armored"
+    "armored",
+    "jet",
+    "brute",
+    "tank"
   ],
   "levels": [
-    "woodlanders_1",
-    "woodlanders_2",
-    "woodlanders_3"
+    "woodlanders_01",
+    "woodlanders_02",
+    "woodlanders_03"
   ]
 }

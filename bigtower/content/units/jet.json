@@ -1,0 +1,19 @@
+{
+  "id": "jet",
+  "name": "Jet",
+  "sprite": {
+    "kind": "pack",
+    "tile": 270
+  },
+  "sprite_scale": 1.1,
+  "hp": 65,
+  "speed": 130,
+  "bounty": 13,
+  "damage_to_base": 1,
+  "radius": 15,
+  "is_flying": true,
+  "movement": "direct",
+  "attack": "none",
+  "description": "Flies straight to the base.",
+  "side": "attacker"
+}

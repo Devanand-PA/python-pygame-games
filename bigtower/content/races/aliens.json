@@ -3,29 +3,35 @@
   "name": "The Brood",
   "order": 1,
   "color": [
-    200,
     150,
-    255
+    120,
+    230
   ],
   "tint": [
-    215,
-    175,
+    170,
+    220,
     255
   ],
+  "description": "Alien hive. Fragile fast drones, zappers and heavy siege.",
   "units": [
     "gun",
-    "cannon",
-    "frost",
-    "scorpion"
+    "tesla",
+    "spitter",
+    "missile",
+    "flak",
+    "bulwark"
   ],
   "enemies": [
-    "fast",
-    "flyer",
-    "hunter",
-    "spitter"
+    "swarm",
+    "spitter_foe",
+    "jet",
+    "bomber",
+    "brute",
+    "warlord"
   ],
   "levels": [
-    "aliens_1",
-    "aliens_2"
+    "aliens_01",
+    "aliens_02",
+    "aliens_03"
   ]
 }

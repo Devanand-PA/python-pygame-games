@@ -1,25 +1,30 @@
 {
   "id": "brute",
   "name": "Brute",
-  "side": "attacker",
-  "movement": "route",
-  "attack": "melee",
-  "sprite_scale": 0.8,
-  "speed": 34,
-  "hp": 620,
-  "bounty": 42,
-  "damage_to_base": 10,
-  "damage": 34,
-  "range": 48,
-  "cooldown": 1.4,
-  "sound": "sting",
   "sprite": {
-    "kind": "shape",
-    "shape": "diamond",
-    "color": [
-      150,
-      90,
-      170
-    ]
-  }
+    "kind": "pack",
+    "tile": 249
+  },
+  "sprite_scale": 1.5,
+  "tint": [
+    255,
+    150,
+    130
+  ],
+  "hp": 220,
+  "speed": 42,
+  "bounty": 22,
+  "damage_to_base": 2,
+  "radius": 20,
+  "movement": "hunt",
+  "attack": "melee",
+  "range": 46,
+  "damage": 14,
+  "cooldown": 0.9,
+  "stop_to_attack": true,
+  "aggro": 210,
+  "targets": "ground",
+  "sound": "sting",
+  "description": "Hunts down the nearest defender and smashes it.",
+  "side": "attacker"
 }

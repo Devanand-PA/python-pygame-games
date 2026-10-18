@@ -1,59 +1,116 @@
-[
-  {
-    "id": "grass",
-    "name": "Grass",
-    "char": "g",
-    "base": 157,
-    "buildable": true,
-    "walkable": false
-  },
-  {
-    "id": "path",
-    "name": "Road",
-    "char": ".",
-    "base": 158,
-    "buildable": false,
-    "walkable": true
-  },
-  {
-    "id": "rock",
-    "name": "Rock",
-    "char": "r",
-    "base": 159,
-    "buildable": false,
-    "walkable": false
-  },
-  {
-    "id": "tree",
-    "name": "Trees",
-    "char": "t",
-    "base": 157,
-    "buildable": false,
-    "walkable": false,
-    "overlay_sprite": {
-      "kind": "pack",
-      "tile": 250
+{
+  "version": 1,
+  "terrain": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "char": "g",
+      "base": 157,
+      "overlay": null,
+      "buildable": true,
+      "walkable": true,
+      "tint": null,
+      "description": "Plain buildable field."
+    },
+    {
+      "id": "road",
+      "name": "Road",
+      "char": ".",
+      "base": 158,
+      "overlay": null,
+      "buildable": false,
+      "walkable": true,
+      "tint": null,
+      "description": "The path enemies walk along. Not buildable."
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "char": "r",
+      "base": 157,
+      "overlay": 136,
+      "buildable": false,
+      "walkable": false,
+      "tint": null,
+      "description": "Boulder: blocks movement and building."
+    },
+    {
+      "id": "bush",
+      "name": "Bush",
+      "char": "t",
+      "base": 157,
+      "overlay": 131,
+      "buildable": false,
+      "walkable": false,
+      "tint": null,
+      "description": "Leafy cover: blocks movement and building."
+    },
+    {
+      "id": "sand",
+      "name": "Sand",
+      "char": "s",
+      "base": 188,
+      "overlay": null,
+      "buildable": true,
+      "walkable": true,
+      "tint": null,
+      "description": "Warm buildable ground."
+    },
+    {
+      "id": "stone",
+      "name": "Stone",
+      "char": "o",
+      "base": 159,
+      "overlay": null,
+      "buildable": true,
+      "walkable": true,
+      "tint": null,
+      "description": "Cool buildable ground."
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "char": "w",
+      "base": 159,
+      "overlay": null,
+      "buildable": false,
+      "walkable": false,
+      "tint": [
+        130,
+        180,
+        255
+      ],
+      "description": "Blocks movement and building."
+    },
+    {
+      "id": "ice",
+      "name": "Ice",
+      "char": "n",
+      "base": 188,
+      "overlay": null,
+      "buildable": true,
+      "walkable": true,
+      "tint": [
+        198,
+        222,
+        255
+      ],
+      "description": "Frozen buildable ground."
+    },
+    {
+      "id": "lava",
+      "name": "Lava",
+      "char": "l",
+      "base": 188,
+      "overlay": null,
+      "buildable": false,
+      "walkable": false,
+      "tint": [
+        255,
+        120,
+        60
+      ],
+      "description": "Blocks movement and building."
     }
-  },
-  {
-    "id": "water",
-    "name": "Water",
-    "char": "w",
-    "base": 159,
-    "buildable": false,
-    "walkable": false,
-    "tint": [
-      150,
-      190,
-      255
-    ]
-  },
-  {
-    "id": "sand",
-    "name": "Sand",
-    "char": "s",
-    "base": 160,
-    "buildable": true,
-    "walkable": true
-  }
-]
+  ]
+}

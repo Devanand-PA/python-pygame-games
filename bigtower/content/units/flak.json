@@ -1,0 +1,22 @@
+{
+  "id": "flak",
+  "name": "Flak Battery",
+  "role": "anti-air",
+  "sprite": {
+    "kind": "pack",
+    "tile": 231
+  },
+  "sprite_scale": 0.95,
+  "hp": 180,
+  "cost": 100,
+  "range": 165,
+  "damage": 13,
+  "cooldown": 0.45,
+  "movement": "static",
+  "attack": "projectile",
+  "projectile": "dot",
+  "targets": "air",
+  "sound": "gun",
+  "description": "Rapid anti-air only.",
+  "side": "defender"
+}

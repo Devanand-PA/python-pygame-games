@@ -1,0 +1,25 @@
+{
+  "id": "warlord",
+  "name": "Warlord",
+  "sprite": {
+    "kind": "pack",
+    "tile": 278
+  },
+  "sprite_scale": 2.0,
+  "hp": 900,
+  "speed": 26,
+  "bounty": 120,
+  "damage_to_base": 5,
+  "radius": 24,
+  "movement": "route",
+  "attack": "projectile",
+  "projectile": "rocket",
+  "range": 150,
+  "damage": 25,
+  "cooldown": 2.2,
+  "splash": 48,
+  "targets": "both",
+  "sound": "missile",
+  "description": "Boss. Soaks damage and shells everything.",
+  "side": "attacker"
+}

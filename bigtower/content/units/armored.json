@@ -1,25 +1,24 @@
 {
   "id": "armored",
   "name": "Armored",
-  "side": "attacker",
+  "sprite": {
+    "kind": "pack",
+    "tile": 249
+  },
+  "sprite_scale": 1.25,
+  "hp": 130,
+  "speed": 40,
+  "bounty": 15,
+  "damage_to_base": 2,
+  "radius": 18,
   "movement": "route",
   "attack": "melee",
-  "sprite_scale": 0.8,
-  "speed": 44,
-  "hp": 240,
-  "bounty": 18,
-  "damage_to_base": 5,
-  "damage": 12,
   "range": 42,
-  "cooldown": 1.0,
+  "damage": 7,
+  "cooldown": 1.1,
+  "stop_to_attack": true,
+  "targets": "ground",
   "sound": "sting",
-  "sprite": {
-    "kind": "shape",
-    "shape": "square",
-    "color": [
-      120,
-      140,
-      170
-    ]
-  }
+  "description": "Stops to batter nearby defenders on its way past.",
+  "side": "attacker"
 }

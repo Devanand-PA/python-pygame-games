@@ -1,21 +1,18 @@
 {
   "id": "runner",
   "name": "Runner",
-  "side": "attacker",
+  "sprite": {
+    "kind": "pack",
+    "tile": 248
+  },
+  "sprite_scale": 1.45,
+  "hp": 30,
+  "speed": 100,
+  "bounty": 8,
+  "damage_to_base": 1,
+  "radius": 14,
   "movement": "route",
   "attack": "none",
-  "sprite_scale": 0.8,
-  "speed": 62,
-  "hp": 60,
-  "bounty": 8,
-  "damage_to_base": 2,
-  "sprite": {
-    "kind": "shape",
-    "shape": "circle",
-    "color": [
-      210,
-      80,
-      70
-    ]
-  }
+  "description": "Fast and fragile.",
+  "side": "attacker"
 }

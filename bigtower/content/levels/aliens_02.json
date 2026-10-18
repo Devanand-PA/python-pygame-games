@@ -1,0 +1,134 @@
+{
+  "id": "aliens_02",
+  "race": "aliens",
+  "name": "The Shallows",
+  "description": "",
+  "gold": 250,
+  "lives": 20,
+  "order": 2,
+  "grid": [
+    "ssssssssssssssssssss",
+    "ssssssss.......sssss",
+    "ssssssss.sssss.sssss",
+    "ssssssss.sssss.sssss",
+    "S........sssss.sssss",
+    "ssssssssssssss.sssss",
+    "ssssssssssssss.sssss",
+    "ssssssssssssss.sssss",
+    "ssB............sssss",
+    "ssssssswssssssssswss"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "gun",
+    "tesla",
+    "spitter",
+    "missile",
+    "flak",
+    "bulwark"
+  ],
+  "enemy_pool": [
+    "swarm",
+    "spitter_foe",
+    "jet",
+    "bomber",
+    "brute",
+    "warlord"
+  ],
+  "waves": [
+    [
+      [
+        "swarm",
+        12,
+        0.6
+      ]
+    ],
+    [
+      [
+        "spitter_foe",
+        7,
+        1.4
+      ]
+    ],
+    [
+      [
+        "brute",
+        5,
+        1.7
+      ]
+    ],
+    [
+      [
+        "jet",
+        11,
+        1.0
+      ],
+      [
+        "bomber",
+        8,
+        1.3
+      ]
+    ],
+    [
+      [
+        "spitter_foe",
+        9,
+        1.4
+      ]
+    ],
+    [
+      [
+        "brute",
+        6,
+        1.7
+      ]
+    ],
+    [
+      [
+        "jet",
+        14,
+        1.0
+      ],
+      [
+        "bomber",
+        10,
+        1.3
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "spitter_foe",
+        12,
+        1.4
+      ]
+    ],
+    [
+      [
+        "brute",
+        8,
+        1.7
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ]
+  ]
+}

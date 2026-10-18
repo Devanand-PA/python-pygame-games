@@ -1,19 +1,22 @@
 {
   "id": "gun",
-  "name": "Gun Tower",
-  "side": "defender",
-  "movement": "static",
-  "attack": "projectile",
-  "sprite_scale": 0.9,
-  "projectile": "bullet",
-  "damage": 10,
-  "range": 140,
-  "cooldown": 0.75,
-  "hp": 140,
-  "cost": 50,
+  "name": "Gun Turret",
+  "role": "ranged",
   "sprite": {
     "kind": "pack",
     "tile": 226
   },
-  "sound": "gun"
+  "sprite_scale": 0.95,
+  "hp": 200,
+  "cost": 50,
+  "range": 135,
+  "damage": 9,
+  "cooldown": 0.4,
+  "projectile": "dot",
+  "sound": "gun",
+  "movement": "static",
+  "attack": "projectile",
+  "targets": "both",
+  "description": "Cheap all-rounder that shoots ground and air.",
+  "side": "defender"
 }

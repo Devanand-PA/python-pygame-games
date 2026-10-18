@@ -1,0 +1,24 @@
+{
+  "id": "spitter_foe",
+  "name": "Spitter",
+  "sprite": {
+    "kind": "pack",
+    "tile": 277
+  },
+  "sprite_scale": 1.2,
+  "hp": 60,
+  "speed": 60,
+  "bounty": 10,
+  "damage_to_base": 1,
+  "radius": 15,
+  "movement": "route",
+  "attack": "projectile",
+  "projectile": "dot",
+  "range": 135,
+  "damage": 7,
+  "cooldown": 1.4,
+  "targets": "ground",
+  "sound": "gun",
+  "description": "Shoots defenders from the path.",
+  "side": "attacker"
+}

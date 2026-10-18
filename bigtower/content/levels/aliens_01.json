@@ -1,0 +1,115 @@
+{
+  "id": "aliens_01",
+  "race": "aliens",
+  "name": "Dust Landing",
+  "description": "",
+  "gold": 220,
+  "lives": 20,
+  "order": 1,
+  "grid": [
+    "sswssssssssssssswsss",
+    "ssssssssssssssssssss",
+    "S.............ssssss",
+    "sssssssssssss.ssssss",
+    "sssssssssssss.ssssss",
+    "sssssssssssss.ssssss",
+    "ssss..........ssssss",
+    "ssss.sssssssssssssss",
+    "ssss...............B",
+    "swssssssssssssssswss"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "gun",
+    "tesla",
+    "spitter",
+    "missile",
+    "flak",
+    "bulwark"
+  ],
+  "enemy_pool": [
+    "swarm",
+    "spitter_foe",
+    "jet",
+    "bomber",
+    "brute",
+    "warlord"
+  ],
+  "waves": [
+    [
+      [
+        "swarm",
+        12,
+        0.6
+      ]
+    ],
+    [
+      [
+        "swarm",
+        13,
+        0.6
+      ]
+    ],
+    [
+      [
+        "swarm",
+        15,
+        0.6
+      ]
+    ],
+    [
+      [
+        "brute",
+        5,
+        1.7
+      ]
+    ],
+    [
+      [
+        "spitter_foe",
+        9,
+        1.4
+      ]
+    ],
+    [
+      [
+        "swarm",
+        19,
+        0.6
+      ]
+    ],
+    [
+      [
+        "jet",
+        14,
+        1.0
+      ],
+      [
+        "bomber",
+        10,
+        1.3
+      ]
+    ],
+    [
+      [
+        "brute",
+        7,
+        1.7
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ]
+  ]
+}

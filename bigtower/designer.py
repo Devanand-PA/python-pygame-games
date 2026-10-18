@@ -1,11 +1,12 @@
-#!/usr/bin/env python3
-"""Standalone level designer for Big Tower.
+"""Standalone level designer.
 
-Usage:
-    python designer.py
+A self-contained pygame application for authoring the game's ``content/``:
 
-Opens a pygame window with Terrain / Units / Races / Levels / Help tabs and
-saves edits back to the ``content/`` JSON the game reads.
+    .venv/bin/python designer.py
+
+Edit terrain, units, races and levels (with a paint-your-own map grid and a wave
+builder), then save straight back to JSON.  See ``level_designer/`` for the
+implementation.
 """
 import sys
 from pathlib import Path
@@ -14,6 +15,5 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from level_designer.app import main  # noqa: E402
 
-
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

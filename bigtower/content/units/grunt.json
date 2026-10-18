@@ -1,0 +1,18 @@
+{
+  "id": "grunt",
+  "name": "Grunt",
+  "sprite": {
+    "kind": "pack",
+    "tile": 247
+  },
+  "sprite_scale": 1.6,
+  "hp": 42,
+  "speed": 55,
+  "bounty": 6,
+  "damage_to_base": 1,
+  "radius": 16,
+  "movement": "route",
+  "attack": "none",
+  "description": "Basic ground trooper.",
+  "side": "attacker"
+}

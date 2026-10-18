@@ -1,18 +1,18 @@
-"""The unified unit: one class for towers *and* enemies.
+"""The unified unit runtime.
 
-A :class:`Unit` wraps a :class:`core.content.UnitType` and drives it with the
-movement/attack rules taken from the type:
+A :class:`Unit` wraps a :class:`core.content.UnitType` and works for *both*
+sides:
 
-    movement  static  a fixed turret
-              chase   a defender that walks after the nearest enemy
-              route   an attacker that follows the map waypoints to the base
-              direct  an attacker that flies straight at the base
-              hunt    an attacker that leaves the path to chase a defender
-    attack    none | melee | projectile   (projectiles are spawned by the scene)
+* **defenders** -- placed by the player.  ``movement="static"`` is a classic
+  tower; ``movement="chase"`` is a melee/ranged unit that walks after the
+  nearest enemy and returns home when the map is clear.
+* **attackers** -- spawned by waves.  ``movement="route"`` follows the map path,
+  ``"direct"`` flies straight at the base, ``"hunt"`` leaves the path to chase a
+  defender.  Any unit with ``attack != "none"`` can damage defenders, so enemies
+  now fight back against towers.
 
-Both sides can fight back, so enemies with an ``attack`` damage towers and
-mobile defenders (the Scorpion) damage enemies.  ``update`` returns ``True`` on
-the frames the unit fires so the scene can play its sound.
+Everything (hp, speed, range, damage, rate, splash, targeting, flying, ...) is
+read from the type, so a level designer can invent any unit without code.
 """
 import math
 
@@ -21,299 +21,387 @@ import pygame
 from core import settings as S
 from engine import art
 
-FRAME_MOVE_EPS = 0.5
-
 
 class Unit:
-    def __init__(self, utype, pos, home=None, base_pos=None, waypoints=None,
-                 wave_number=1, race_tint=None):
+    def __init__(self, utype, pos, *, base_pos=None, waypoints=None,
+                 wave_number=1, home=None, race_tint=None):
         self.type = utype
         self.side = utype.side
-        self.attack = utype.attack
-        self.speed = utype.speed
         self.pos = [float(pos[0]), float(pos[1])]
-        self.home = home                        # a defender's build cell centre
-        self.base_pos = base_pos                # an attacker's objective
-        self.wave_number = int(wave_number or 1)
+        self.base_pos = base_pos
+        self.home = home                     # defenders: cell centre to return to
         self.tint = utype.tint or race_tint
 
-        # movement bookkeeping
-        self.waypoints = list(waypoints or [])
-        self.wp_index = 1 if len(self.waypoints) > 1 else 0
-        self.reached_base = False
-
-        # combat / progression
-        self.level = 1
-        self.invested = int(utype.cost)
-        self._wave_hp = 1.0 + 0.10 * (self.wave_number - 1) if self.side == "attacker" else 1.0
-        self._wave_dmg = 1.0 + 0.08 * (self.wave_number - 1) if self.side == "attacker" else 1.0
-        self._refresh_stats()
-        self.hp = self.max_hp
         self.alive = True
-        self._attack_timer = 0.0
+        self.reached_base = False
+        self.heading = 90.0
+        self.radius = utype.radius
+        self.is_flying = utype.is_flying
 
-        # animation
-        self.size = max(12, int(S.TILE * utype.sprite_scale))
-        self.radius = self.size / 2.0
-        self._angle = 0.0
+        # defenders get upgrade-driven scaling, attackers get wave scaling
+        self.level = 1
+        self.invested = utype.cost
+        self.kills = 0
+        self._wave_scale = 1.0 + 0.10 * max(0, wave_number - 1) if utype.is_attacker else 1.0
+
+        self.cooldown_left = 0.0
+        self.hunt_target = None
+
+        if utype.is_flying or utype.movement in ("direct",):
+            self.route = [tuple(pos), tuple(base_pos)] if base_pos else [tuple(pos)]
+        elif waypoints:
+            self.route = [tuple(w) for w in waypoints]
+        else:
+            self.route = [tuple(pos)] if not base_pos else [tuple(pos), tuple(base_pos)]
+        self.route_index = 0
+
+        self._size = max(8, int(S.TILE * self.type.sprite_scale))
+        self._anim_cache = {}
+        self._frames = art.sprite_frames(self.type.sprite, self._size, self.tint)
+        self._sprite = self._frames[0]
+        self._fps = art.fps(self.type.sprite)
+        self._loop = art.loops(self.type.sprite)
+        # desync identical units so a crowd doesn't animate in lockstep
+        self._anim_offset = (self.pos[0] * 0.013 + self.pos[1] * 0.017) % 1.0
+        # animation state machine (idle / walk / attack / death)
         self.anim_state = "idle"
         self._state_time = 0.0
-        self._last_pos = (self.pos[0], self.pos[1])
-        self._frames = art.sprite_frames(utype.sprite, self.size, self.tint)
+        self._attack_flash = 0.0
+        self._move_flash = 0.0
+        self._last_pos = [self.pos[0], self.pos[1]]
+        self.max_hp = self._base_max_hp()
+        self.hp = self.max_hp
 
-    # -------------------------------------------------------------- stats
-    def _refresh_stats(self):
-        lv = self.level - 1
-        self.damage = self.type.damage * (S.UNIT_DAMAGE_GAIN ** lv) * self._wave_dmg
-        self.range = self.type.range * (S.UNIT_RANGE_GAIN ** lv)
-        self.cooldown = max(0.05, self.type.cooldown * (S.UNIT_RATE_GAIN ** lv))
-        self.max_hp = self.type.hp * (S.UNIT_HP_GAIN ** lv) * self._wave_hp
+    # ------------------------------------------------------------- stats
+    def _base_max_hp(self):
+        hp = self.type.hp
+        if self.type.is_defender:
+            hp *= S.UNIT_HP_GAIN ** (self.level - 1)
+        else:
+            hp *= self._wave_scale
+        return max(1, int(round(hp)))
 
+    @property
+    def damage(self):
+        dmg = self.type.damage
+        if self.type.is_defender:
+            dmg *= S.UNIT_DAMAGE_GAIN ** (self.level - 1)
+        return dmg
+
+    @property
+    def range(self):
+        rng = self.type.range
+        if self.type.is_defender:
+            rng *= S.UNIT_RANGE_GAIN ** (self.level - 1)
+        return rng
+
+    @property
+    def cooldown(self):
+        cd = self.type.cooldown
+        if self.type.is_defender:
+            cd *= S.UNIT_RATE_GAIN ** (self.level - 1)
+        return max(0.01, cd)
+
+    @property
+    def progress(self):
+        return self.route_index
+
+    def has_animation(self, name):
+        return name in art.animation_names(self.type.sprite)
+
+    def death_duration(self):
+        """Seconds a death animation should linger (0 if there is none)."""
+        if not self.has_animation("death"):
+            return 0.0
+        n = art.frame_count(self.type.sprite, "death")
+        rate = art.fps(self.type.sprite, name="death")
+        return min(1.2, max(0.25, n / max(0.1, rate)))
+
+    def tick_death(self, dt):
+        self._state_time += dt
+
+    def _frames_for(self, name=None):
+        key = name or ""
+        if key not in self._anim_cache:
+            self._anim_cache[key] = art.sprite_frames(
+                self.type.sprite, self._size, self.tint, name=name)
+        return self._anim_cache[key]
+
+    def _current_frame(self):
+        frames = self._frames_for(self.anim_state)
+        if len(frames) > 1:
+            i = int((self._state_time + self._anim_offset)
+                    * art.fps(self.type.sprite, name=self.anim_state))
+            n = len(frames)
+            loop = art.loops(self.type.sprite, self.anim_state)
+            idx = i % n if loop else min(n - 1, i)
+            return frames[idx]
+        return frames[0]
+
+    # ------------------------------------------------------------- upgrades
     def upgrade_cost(self):
         if self.level >= S.UNIT_MAX_LEVEL:
             return None
-        return int(self.type.cost * (1.6 ** self.level))
-
-    def upgrade(self):
-        """Raise this tower one level; returns the gold spent (or 0)."""
-        cost = self.upgrade_cost()
-        if cost is None:
-            return 0
-        old_max = self.max_hp
-        self.level += 1
-        self.invested += cost
-        self._refresh_stats()
-        self.hp += (self.max_hp - old_max)
-        return cost
+        return int(round(self.type.cost * 0.9 * self.level))
 
     def sell_value(self):
         return int(self.invested * S.SELL_RATIO)
 
-    # -------------------------------------------------------------- combat
-    def take_hit(self, amount):
-        if not self.alive:
-            return
-        self.hp -= amount
-        if self.hp <= 0:
-            self.hp = 0
-            self.alive = False
-
-    def _dist(self, other):
-        return math.hypot(self.pos[0] - other[0], self.pos[1] - other[1])
-
-    def _nearest(self, units):
-        best, best_d = None, None
-        for unit in units:
-            if unit is self or not unit.alive or unit.side == self.side:
-                continue
-            d = self._dist(unit.pos)
-            if best_d is None or d < best_d:
-                best, best_d = unit, d
-        return best
-
-    def _pick_target(self, enemies):
-        best, best_d = None, None
-        reach = self.range
-        for unit in enemies:
-            if unit is self or not unit.alive or unit.side == self.side:
-                continue
-            d = self._dist(unit.pos)
-            if d <= reach + unit.radius and (best_d is None or d < best_d):
-                best, best_d = unit, d
-        return best
-
-    def _do_attack(self, target, fire, effects):
-        if self.attack == "melee":
-            target.take_hit(self.damage)
-            effects.append(("hit", list(target.pos)))
-        elif self.attack == "projectile":
-            fire(self, target)
-
-    # -------------------------------------------------------------- movement
-    def _face(self, dx, dy):
-        if dx or dy:
-            self._angle = art.angle_between((0, 0), (dx, dy))
-
-    def _move_to(self, dt, target_pos, stop=0.0):
-        dx = target_pos[0] - self.pos[0]
-        dy = target_pos[1] - self.pos[1]
-        d = math.hypot(dx, dy)
-        if d <= max(stop, 1e-6):
+    def upgrade(self):
+        cost = self.upgrade_cost()
+        if cost is None:
             return False
-        step = min(self.speed * dt, d - stop if d > stop else 0.0)
-        if step <= 0:
-            return False
-        self.pos[0] += dx / d * step
-        self.pos[1] += dy / d * step
-        self._face(dx, dy)
+        self.level += 1
+        self.invested += cost
+        ratio = self.hp / max(1, self.max_hp)
+        self.max_hp = self._base_max_hp()
+        self.hp = min(self.max_hp, max(self.hp, int(self.max_hp * ratio)))
+        self.hp = self.max_hp
         return True
 
-    def _follow_route(self, dt):
-        if not self.waypoints:
-            if self.base_pos is not None:
-                self._move_to(dt, self.base_pos)
-            return
-        if self.wp_index >= len(self.waypoints):
-            self._arrive()
-            return
-        wp = self.waypoints[self.wp_index]
-        dx = wp[0] - self.pos[0]
-        dy = wp[1] - self.pos[1]
-        d = math.hypot(dx, dy)
-        step = self.speed * dt
-        if d <= step or d < 1e-6:
-            self.pos[0], self.pos[1] = float(wp[0]), float(wp[1])
-            self._face(dx, dy)
-            self.wp_index += 1
-            if self.wp_index >= len(self.waypoints):
-                self._arrive()
-        else:
-            self.pos[0] += dx / d * step
-            self.pos[1] += dy / d * step
-            self._face(dx, dy)
-
-    def _arrive(self):
-        """An attacker that made it to the base leaks and is removed."""
-        self.reached_base = True
-        self.alive = False
-
-    def _chase(self, dt, enemies):
-        target = self._nearest(enemies)
-        if target is not None:
-            if self._dist(target.pos) > self.range * 0.8:
-                self._move_to(dt, target.pos)
-            return
-        if self.home is not None:
-            self._move_to(dt, self.home, stop=2.0)
-
-    # -------------------------------------------------------------- update
-    def update(self, dt, attackers, defenders, fire, effects):
-        """Advance one tick. Returns True if the unit fired this frame."""
+    # ------------------------------------------------------------- combat
+    def update(self, dt, attackers, defenders, spawn_projectile, effects=None):
+        """Advance one step.  Returns True when the unit fired (for sound)."""
         if not self.alive:
             return False
-
-        if self.side == "defender":
-            enemies, allies = attackers, defenders
-        else:
-            enemies, allies = defenders, attackers
-
+        self.cooldown_left = max(0.0, self.cooldown_left - dt)
         fired = False
-        move = self.type.movement
-
         if self.side == "defender":
-            if move == "chase":
-                self._chase(dt, enemies)
+            fired = self._update_defender(dt, attackers, spawn_projectile, effects)
         else:
-            if move == "route":
-                self._follow_route(dt)
-            elif move == "direct":
-                if self.base_pos is not None:
-                    self._move_to(dt, self.base_pos)
-                    if self._dist(self.base_pos) <= max(self.radius, 6):
-                        self._arrive()
-            elif move == "hunt":
-                quarry = self._nearest(allies)
-                if quarry is not None and self._dist(quarry.pos) <= 260:
-                    self._move_to(dt, quarry.pos)
-                else:
-                    self._follow_route(dt)
-
-        if not self.alive:
-            return False
-
-        if self.attack != "none":
-            target = self._pick_target(enemies)
-            self._attack_timer -= dt
-            if target is not None and self._attack_timer <= 0.0:
-                self._do_attack(target, fire, effects)
-                self._attack_timer = self.cooldown
-                fired = True
-
+            fired = self._update_attacker(dt, defenders, spawn_projectile, effects)
         self._update_anim_state(dt, fired)
         return fired
 
-    # -------------------------------------------------------------- animation
-    def _frames_for(self, name):
-        spec = self.type.sprite
-        if isinstance(spec, dict) and spec.get("kind") == "sprites":
-            anims = spec.get("animations") or {}
-            if name in anims:
-                return art.sprite_frames(spec, self.size, self.tint, name=name)
-            if "idle" in anims:
-                return art.sprite_frames(spec, self.size, self.tint, name="idle")
-        return self._frames
-
     def _update_anim_state(self, dt, fired):
-        moved = self._dist(self._last_pos) > FRAME_MOVE_EPS
-        self._last_pos = (self.pos[0], self.pos[1])
-        if not self.alive or self.hp <= 0:
+        """Pick idle / walk / attack / death for the next frame."""
+        self._state_time += dt
+        self._attack_flash = max(0.0, self._attack_flash - dt)
+        self._move_flash = max(0.0, self._move_flash - dt)
+        moved = (abs(self.pos[0] - self._last_pos[0])
+                 + abs(self.pos[1] - self._last_pos[1])) > 0.05
+        self._last_pos = [self.pos[0], self.pos[1]]
+        if moved:
+            self._move_flash = 0.18
+        if fired:
+            self._attack_flash = 0.30
+        if self.hp <= 0:
             state = "death"
-        elif fired:
+        elif self._attack_flash > 0:
             state = "attack"
-        elif moved:
+        elif self._move_flash > 0:
             state = "walk"
         else:
             state = "idle"
         if state != self.anim_state:
             self.anim_state = state
             self._state_time = 0.0
+
+    def _update_defender(self, dt, attackers, spawn_projectile, effects):
+        detect = self.type.aggro if self.type.movement == "chase" else self.range
+        target = self._pick_target(attackers, detect)
+        if self.type.movement == "chase":
+            if target is not None:
+                if self._dist(target.pos) > self.range * 0.85:
+                    self._move_toward(target.pos, dt)
+                else:
+                    self.heading = art.angle_between(self.pos, target.pos)
+            elif self.home is not None and self._dist(self.home) > 2.0:
+                self._move_toward(self.home, dt)
+        if target is not None:
+            self.heading = art.angle_between(self.pos, target.pos)
+            if self.cooldown_left <= 0 and self._dist(target.pos) <= self.range:
+                return self._do_attack(target, spawn_projectile, effects)
+        return False
+
+    def _update_attacker(self, dt, defenders, spawn_projectile, effects):
+        target = None
+        if self.type.attack != "none":
+            rng = self.type.aggro if self.type.movement in ("hunt", "chase") else self.range
+            target = self._pick_target(defenders, rng)
+        self.hunt_target = target
+
+        moving = not (target is not None and self.type.stop_to_attack)
+        if self.type.movement == "route":
+            if moving:
+                self._follow_route(dt)
+        elif self.type.movement == "direct":
+            if moving:
+                self._fly_to(dt)
+        elif self.type.movement == "hunt":
+            if target is not None:
+                if self._dist(target.pos) > self.range * 0.85:
+                    self._move_toward(target.pos, dt)
+                else:
+                    self.heading = art.angle_between(self.pos, target.pos)
+            else:
+                self._follow_route(dt)
+
+        fired = False
+        if target is not None and self.type.attack != "none":
+            self.heading = art.angle_between(self.pos, target.pos)
+            if self.cooldown_left <= 0 and self._dist(target.pos) <= self.range:
+                fired = self._do_attack(target, spawn_projectile, effects)
+
+        # arrival / leak
+        if self.type.movement in ("route", "hunt"):
+            if (self.route_index >= len(self.route)
+                    and (self.hunt_target is None or not self.hunt_target.alive)):
+                self.reached_base = True
+                self.alive = False
+        elif self.type.movement == "direct":
+            if self.base_pos is not None and self._dist(self.base_pos) <= 6.0:
+                self.reached_base = True
+                self.alive = False
+        return fired
+
+    def _do_attack(self, target, spawn_projectile, effects):
+        self.cooldown_left = self.cooldown
+        if self.type.attack == "projectile":
+            spawn_projectile(self, target)
+            return True
+        if self.type.attack == "melee":
+            died = target.take_hit(self.damage)
+            if effects is not None:
+                effects.append(("hit", list(target.pos)))
+            if died:
+                self.kills += 1
+            return True
+        return False
+
+    def _pick_target(self, units, rng):
+        mode = self.type.default_targeting
+        can_air = self.type.targets in ("air", "both")
+        can_ground = self.type.targets in ("ground", "both")
+        rng2 = rng * rng
+        best, best_score = None, None
+        for unit in units:
+            if not unit.alive or not unit.type.can_be_attacked:
+                continue
+            if unit.is_flying and not can_air:
+                continue
+            if not unit.is_flying and not can_ground:
+                continue
+            d2 = ((unit.pos[0] - self.pos[0]) ** 2
+                  + (unit.pos[1] - self.pos[1]) ** 2)
+            if d2 > rng2:
+                continue
+            if mode == "first":
+                score = unit.progress
+            elif mode == "strongest":
+                score = unit.hp
+            elif mode == "weakest":
+                score = -unit.hp
+            else:                      # nearest
+                score = -d2
+            if best_score is None or score > best_score:
+                best_score, best = score, unit
+        return best
+
+    # ------------------------------------------------------------- movement
+    def _dist(self, point):
+        return math.hypot(point[0] - self.pos[0], point[1] - self.pos[1])
+
+    def _move_toward(self, point, dt):
+        dx, dy = point[0] - self.pos[0], point[1] - self.pos[1]
+        dist = math.hypot(dx, dy)
+        if dist < 0.5:
+            return
+        step = min(self.speed_step(dt), dist)
+        self.pos[0] += dx / dist * step
+        self.pos[1] += dy / dist * step
+        self.heading = art.angle_between(self.pos, point)
+
+    def speed_step(self, dt):
+        return self.type.speed * dt
+
+    def _advance_route(self, dt, target_point):
+        dist = self._dist(target_point)
+        remaining = self.speed_step(dt)
+        if dist <= remaining:
+            self.pos[0], self.pos[1] = target_point
+            return True
+        self.pos[0] += (target_point[0] - self.pos[0]) / dist * remaining
+        self.pos[1] += (target_point[1] - self.pos[1]) / dist * remaining
+        self.heading = art.angle_between(self.pos, target_point)
+        return False
+
+    def _follow_route(self, dt):
+        remaining = self.speed_step(dt)
+        while remaining > 0 and self.route_index < len(self.route):
+            target = self.route[self.route_index]
+            dx, dy = target[0] - self.pos[0], target[1] - self.pos[1]
+            dist = math.hypot(dx, dy)
+            if dist <= remaining:
+                self.pos[0], self.pos[1] = target
+                remaining -= dist
+                self.route_index += 1
+            else:
+                self.pos[0] += dx / dist * remaining
+                self.pos[1] += dy / dist * remaining
+                remaining = 0
+            if dist > 0.001:
+                self.heading = art.angle_between(self.pos, target)
+
+    def _fly_to(self, dt):
+        if self.base_pos is None:
+            self.route_index = len(self.route)
+            return
+        remaining = self.speed_step(dt)
+        dx, dy = self.base_pos[0] - self.pos[0], self.base_pos[1] - self.pos[1]
+        dist = math.hypot(dx, dy)
+        if dist <= remaining:
+            self.pos[0], self.pos[1] = self.base_pos
         else:
-            self._state_time += dt
+            self.pos[0] += dx / dist * remaining
+            self.pos[1] += dy / dist * remaining
+            self.heading = art.angle_between(self.pos, self.base_pos)
 
-    def death_duration(self):
-        spec = self.type.sprite
-        if not (isinstance(spec, dict) and spec.get("kind") == "sprites"):
-            return 0.0
-        if "death" not in (spec.get("animations") or {}):
-            return 0.0
-        frames = art.frame_count(spec, "death")
-        fps = art.fps(spec, name="death")
-        if fps <= 0:
-            return 0.0
-        return frames / fps
+    # ------------------------------------------------------------------ draw
+    def take_hit(self, dmg):
+        if not self.alive:
+            return False
+        self.hp -= dmg
+        if self.hp <= 0:
+            self.hp = 0
+            self.alive = False
+            return True
+        return False
 
-    def tick_death(self, dt):
-        self._state_time += dt
-
-    def _current_frame(self, count):
-        if count <= 1:
-            return 0
-        spec = self.type.sprite
-        if isinstance(spec, dict) and spec.get("kind") in ("sprites", "anim", "sheet"):
-            try:
-                return art.frame_index(spec, self._state_time, name=self.anim_state) % count
-            except Exception:
-                return 0
-        return 0
-
-    # -------------------------------------------------------------- drawing
     def draw(self, canvas, show_hp=True, force=False):
         if not self.alive and not force:
             return
-        frames = self._frames_for(self.anim_state)
-        if not frames:
-            return
-        img = frames[self._current_frame(len(frames))]
-        if self._angle:
-            img = art.rot(img, self._angle)
-        canvas.blit(img, img.get_rect(center=(int(self.pos[0]), int(self.pos[1]))))
-        if show_hp and self.alive and self.max_hp > 0 and self.hp < self.max_hp:
-            self._draw_hp(canvas)
+        img = art.rot(self._current_frame(), self.heading)
+        canvas.blit(img, img.get_rect(center=self.pos))
+        if show_hp and self.hp < self.max_hp:
+            self._draw_hp_bar(canvas)
 
-    def _draw_hp(self, canvas):
-        w = max(20, self.size)
-        frac = max(0.0, min(1.0, self.hp / self.max_hp))
-        x = int(self.pos[0] - w / 2)
-        y = int(self.pos[1] - self.radius - 8)
-        pygame.draw.rect(canvas, (30, 30, 34), (x, y, w, 5), border_radius=2)
-        color = (120, 220, 120) if frac > 0.5 else (230, 200, 80) if frac > 0.25 else (230, 80, 80)
+    def _draw_hp_bar(self, canvas):
+        w = max(22, int(self.radius * 2))
+        frac = max(0.0, self.hp / self.max_hp)
+        x = int(self.pos[0] - w // 2)
+        y = int(self.pos[1] - self.radius - 9)
+        pygame.draw.rect(canvas, (40, 40, 40), (x, y, w, 5), border_radius=2)
+        color = (120, 220, 120) if frac > 0.5 else (
+            (240, 200, 60) if frac > 0.25 else (230, 80, 80))
         pygame.draw.rect(canvas, color, (x, y, int(w * frac), 5), border_radius=2)
 
-    def draw_range(self, canvas):
-        r = int(self.range)
-        if r <= 0:
-            return
-        surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
-        pygame.draw.circle(surf, (255, 255, 255, 40), (r, r), r)
-        pygame.draw.circle(surf, (255, 255, 255, 120), (r, r), r, 2)
-        canvas.blit(surf, (int(self.pos[0]) - r, int(self.pos[1]) - r))
+    def draw_range(self, canvas, color=(255, 255, 255)):
+        rng = int(self.range)
+        ring = pygame.Surface((rng * 2 + 4, rng * 2 + 4), pygame.SRCALPHA)
+        center = (ring.get_width() // 2, ring.get_height() // 2)
+        pygame.draw.circle(ring, tuple(color) + (36,), center, rng)
+        pygame.draw.circle(ring, tuple(color) + (120,), center, rng, 2)
+        canvas.blit(ring, (self.pos[0] - ring.get_width() // 2,
+                           self.pos[1] - ring.get_height() // 2))
+
+
+def spawn_attacker(utype, level, spawn_pos, base_pos, wave_number, race_tint=None):
+    """Convenience constructor used by the game scene."""
+    return Unit(utype, spawn_pos, base_pos=base_pos,
+                waypoints=level.waypoints, wave_number=wave_number,
+                race_tint=race_tint)
+
+
+def spawn_defender(utype, cell, center, race_tint=None):
+    return Unit(utype, center, home=center, race_tint=race_tint)

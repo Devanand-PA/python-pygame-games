@@ -1,0 +1,23 @@
+{
+  "id": "thornling",
+  "name": "Thornling",
+  "role": "melee",
+  "sprite": {
+    "kind": "pack",
+    "tile": 227
+  },
+  "sprite_scale": 0.9,
+  "hp": 140,
+  "cost": 45,
+  "speed": 120,
+  "range": 40,
+  "damage": 6,
+  "cooldown": 0.35,
+  "movement": "chase",
+  "attack": "melee",
+  "targets": "ground",
+  "sound": "sting",
+  "aggro": 190,
+  "description": "Fast, cheap melee chaser.",
+  "side": "defender"
+}

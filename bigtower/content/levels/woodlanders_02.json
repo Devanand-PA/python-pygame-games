@@ -1,0 +1,139 @@
+{
+  "id": "woodlanders_02",
+  "race": "woodlanders",
+  "name": "Twin Brooks",
+  "description": "",
+  "gold": 250,
+  "lives": 20,
+  "order": 2,
+  "grid": [
+    "gggggggggggggggggggg",
+    "gggggggg.......ggggg",
+    "gggggggg.ggggg.ggggg",
+    "gggggggg.ggggg.ggggg",
+    "S........ggggg.ggggg",
+    "gggggggggggggg.ggggg",
+    "gggggggggggggg.ggggg",
+    "gggggggggggggg.ggggg",
+    "ggB............ggggg",
+    "gggggggtgggggggggtgg"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "gun",
+    "scorpion",
+    "thornling",
+    "spitter",
+    "missile",
+    "snakewatch"
+  ],
+  "enemy_pool": [
+    "grunt",
+    "runner",
+    "armored",
+    "jet",
+    "brute",
+    "tank"
+  ],
+  "waves": [
+    [
+      [
+        "grunt",
+        6,
+        1.2
+      ]
+    ],
+    [
+      [
+        "runner",
+        9,
+        0.9
+      ]
+    ],
+    [
+      [
+        "armored",
+        7,
+        1.6
+      ],
+      [
+        "brute",
+        5,
+        1.7
+      ]
+    ],
+    [
+      [
+        "jet",
+        11,
+        1.0
+      ]
+    ],
+    [
+      [
+        "runner",
+        12,
+        0.9
+      ]
+    ],
+    [
+      [
+        "armored",
+        10,
+        1.6
+      ],
+      [
+        "brute",
+        6,
+        1.7
+      ]
+    ],
+    [
+      [
+        "jet",
+        14,
+        1.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ],
+    [
+      [
+        "runner",
+        16,
+        0.9
+      ]
+    ],
+    [
+      [
+        "armored",
+        12,
+        1.6
+      ],
+      [
+        "brute",
+        8,
+        1.7
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ]
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "bulwark",
+  "name": "Bulwark",
+  "role": "melee",
+  "sprite": {
+    "kind": "pack",
+    "tile": 232
+  },
+  "sprite_scale": 1.0,
+  "hp": 430,
+  "cost": 140,
+  "speed": 60,
+  "range": 44,
+  "damage": 18,
+  "cooldown": 0.9,
+  "movement": "chase",
+  "attack": "melee",
+  "targets": "ground",
+  "sound": "sting",
+  "aggro": 170,
+  "description": "Armoured melee brawler that walks to the enemy.",
+  "side": "defender"
+}

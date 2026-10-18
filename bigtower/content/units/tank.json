@@ -1,0 +1,25 @@
+{
+  "id": "tank",
+  "name": "Siege Tank",
+  "sprite": {
+    "kind": "pack",
+    "tile": 250
+  },
+  "sprite_scale": 1.4,
+  "hp": 400,
+  "speed": 28,
+  "bounty": 45,
+  "damage_to_base": 3,
+  "radius": 21,
+  "movement": "route",
+  "attack": "projectile",
+  "projectile": "rocket",
+  "range": 125,
+  "damage": 20,
+  "cooldown": 2.0,
+  "splash": 40,
+  "targets": "ground",
+  "sound": "missile",
+  "description": "Slow siege unit that shells defenders.",
+  "side": "attacker"
+}

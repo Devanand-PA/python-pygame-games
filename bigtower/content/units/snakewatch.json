@@ -1,19 +1,22 @@
 {
   "id": "snakewatch",
   "name": "Snakewatch",
-  "side": "defender",
-  "movement": "static",
-  "attack": "projectile",
-  "sprite_scale": 0.95,
-  "projectile": "bullet",
-  "damage": 26,
-  "range": 210,
-  "cooldown": 1.3,
-  "hp": 150,
-  "cost": 110,
+  "role": "sniper",
   "sprite": {
     "kind": "image",
     "path": "units/towers/forest-towers/snakewatch-tower/snakewatch-001.png"
   },
-  "sound": "gun"
+  "sprite_scale": 0.98,
+  "hp": 150,
+  "cost": 160,
+  "range": 270,
+  "damage": 70,
+  "cooldown": 1.8,
+  "movement": "static",
+  "attack": "projectile",
+  "projectile": "dot",
+  "sound": "sniper",
+  "targets": "both",
+  "description": "Extreme range, huge single shots.",
+  "side": "defender"
 }

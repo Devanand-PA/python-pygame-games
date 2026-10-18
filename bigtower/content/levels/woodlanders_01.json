@@ -1,0 +1,120 @@
+{
+  "id": "woodlanders_01",
+  "race": "woodlanders",
+  "name": "Greenfield Road",
+  "description": "",
+  "gold": 220,
+  "lives": 20,
+  "order": 1,
+  "grid": [
+    "ggtgggggggggggggtggg",
+    "gggggggggggggggggggg",
+    "S.............gggggg",
+    "ggggggggggggg.gggggg",
+    "ggggggggggggg.gggggg",
+    "ggggggggggggg.gggggg",
+    "gggg..........gggggg",
+    "gggg.ggggggggggggggg",
+    "gggg...............B",
+    "gtgggggggggggggggtgg"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "gun",
+    "scorpion",
+    "thornling",
+    "spitter",
+    "missile",
+    "snakewatch"
+  ],
+  "enemy_pool": [
+    "grunt",
+    "runner",
+    "armored",
+    "jet",
+    "brute",
+    "tank"
+  ],
+  "waves": [
+    [
+      [
+        "grunt",
+        6,
+        1.2
+      ]
+    ],
+    [
+      [
+        "grunt",
+        7,
+        1.2
+      ]
+    ],
+    [
+      [
+        "grunt",
+        7,
+        1.2
+      ]
+    ],
+    [
+      [
+        "armored",
+        8,
+        1.6
+      ],
+      [
+        "brute",
+        5,
+        1.7
+      ]
+    ],
+    [
+      [
+        "runner",
+        12,
+        0.9
+      ]
+    ],
+    [
+      [
+        "grunt",
+        10,
+        1.2
+      ]
+    ],
+    [
+      [
+        "jet",
+        14,
+        1.0
+      ]
+    ],
+    [
+      [
+        "armored",
+        11,
+        1.6
+      ],
+      [
+        "brute",
+        7,
+        1.7
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ]
+  ]
+}

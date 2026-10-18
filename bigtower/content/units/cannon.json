@@ -1,20 +1,22 @@
 {
   "id": "cannon",
   "name": "Cannon",
-  "side": "defender",
-  "movement": "static",
-  "attack": "projectile",
-  "sprite_scale": 0.95,
-  "projectile": "rocket",
-  "splash": 52,
-  "damage": 30,
-  "range": 165,
-  "cooldown": 1.7,
-  "hp": 190,
-  "cost": 120,
+  "role": "splash",
   "sprite": {
     "kind": "pack",
-    "tile": 228
+    "tile": 230
   },
-  "sound": "missile"
+  "sprite_scale": 0.95,
+  "hp": 240,
+  "cost": 150,
+  "range": 145,
+  "damage": 42,
+  "cooldown": 1.6,
+  "movement": "static",
+  "attack": "projectile",
+  "projectile": "rocket",
+  "splash": 70,
+  "sound": "missile",
+  "description": "Slow, heavy splash artillery.",
+  "side": "defender"
 }

@@ -1,0 +1,22 @@
+{
+  "id": "missile",
+  "name": "Missile Silo",
+  "role": "splash",
+  "sprite": {
+    "kind": "pack",
+    "tile": 205
+  },
+  "sprite_scale": 0.95,
+  "hp": 180,
+  "cost": 110,
+  "range": 175,
+  "damage": 30,
+  "cooldown": 1.3,
+  "movement": "static",
+  "attack": "projectile",
+  "projectile": "rocket",
+  "splash": 56,
+  "sound": "missile",
+  "description": "Splash rockets that hit groups.",
+  "side": "defender"
+}

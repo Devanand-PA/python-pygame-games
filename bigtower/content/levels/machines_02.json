@@ -1,0 +1,139 @@
+{
+  "id": "machines_02",
+  "race": "machines",
+  "name": "Rust Flats",
+  "description": "",
+  "gold": 250,
+  "lives": 20,
+  "order": 2,
+  "grid": [
+    "oooooooooooooooooooo",
+    "oooooooo.......ooooo",
+    "oooooooo.ooooo.ooooo",
+    "oooooooo.ooooo.ooooo",
+    "S........ooooo.ooooo",
+    "oooooooooooooo.ooooo",
+    "oooooooooooooo.ooooo",
+    "oooooooooooooo.ooooo",
+    "ooB............ooooo",
+    "oooooooroooooooooroo"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "gun",
+    "cannon",
+    "missile",
+    "flak",
+    "snakewatch",
+    "bulwark"
+  ],
+  "enemy_pool": [
+    "grunt",
+    "armored",
+    "tank",
+    "bomber",
+    "warlord",
+    "runner"
+  ],
+  "waves": [
+    [
+      [
+        "grunt",
+        6,
+        1.2
+      ]
+    ],
+    [
+      [
+        "armored",
+        7,
+        1.6
+      ]
+    ],
+    [
+      [
+        "armored",
+        7,
+        1.6
+      ]
+    ],
+    [
+      [
+        "bomber",
+        8,
+        1.3
+      ]
+    ],
+    [
+      [
+        "armored",
+        9,
+        1.6
+      ]
+    ],
+    [
+      [
+        "armored",
+        10,
+        1.6
+      ]
+    ],
+    [
+      [
+        "bomber",
+        10,
+        1.3
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ],
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "armored",
+        12,
+        1.6
+      ]
+    ],
+    [
+      [
+        "armored",
+        12,
+        1.6
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ],
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ],
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ]
+  ]
+}

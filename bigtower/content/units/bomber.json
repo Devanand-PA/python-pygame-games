@@ -1,0 +1,25 @@
+{
+  "id": "bomber",
+  "name": "Bomber",
+  "sprite": {
+    "kind": "pack",
+    "tile": 271
+  },
+  "sprite_scale": 1.2,
+  "hp": 90,
+  "speed": 90,
+  "bounty": 18,
+  "damage_to_base": 2,
+  "radius": 16,
+  "is_flying": true,
+  "movement": "direct",
+  "attack": "projectile",
+  "projectile": "rocket",
+  "range": 120,
+  "damage": 12,
+  "cooldown": 1.6,
+  "targets": "ground",
+  "sound": "missile",
+  "description": "Flies over the map bombing defenders.",
+  "side": "attacker"
+}

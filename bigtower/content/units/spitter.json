@@ -1,26 +1,21 @@
 {
   "id": "spitter",
   "name": "Spitter",
-  "side": "attacker",
-  "movement": "route",
-  "attack": "projectile",
-  "sprite_scale": 0.8,
-  "speed": 58,
-  "hp": 130,
-  "bounty": 16,
-  "damage_to_base": 3,
-  "projectile": "bullet",
-  "damage": 10,
-  "range": 130,
-  "cooldown": 1.2,
-  "sound": "gun",
+  "role": "ranged",
   "sprite": {
-    "kind": "shape",
-    "shape": "circle",
-    "color": [
-      90,
-      200,
-      120
-    ]
-  }
+    "kind": "pack",
+    "tile": 228
+  },
+  "sprite_scale": 0.9,
+  "hp": 190,
+  "cost": 90,
+  "range": 150,
+  "damage": 14,
+  "cooldown": 0.7,
+  "movement": "static",
+  "attack": "projectile",
+  "projectile": "dot",
+  "sound": "gun",
+  "description": "Steady mid-range shooter.",
+  "side": "defender"
 }

@@ -3,28 +3,35 @@
   "name": "Iron Legion",
   "order": 2,
   "color": [
-    190,
-    200,
-    220
+    220,
+    150,
+    120
   ],
   "tint": [
-    205,
-    215,
-    235
+    255,
+    190,
+    160
   ],
+  "description": "War machines. Slow, armoured and equipped with heavy artillery.",
   "units": [
     "gun",
-    "mortar",
-    "sniper",
-    "cannon"
+    "cannon",
+    "missile",
+    "flak",
+    "snakewatch",
+    "bulwark"
   ],
   "enemies": [
+    "grunt",
     "armored",
-    "brute",
-    "hunter"
+    "tank",
+    "bomber",
+    "warlord",
+    "runner"
   ],
   "levels": [
-    "machines_1",
-    "machines_2"
+    "machines_01",
+    "machines_02",
+    "machines_03"
   ]
 }
