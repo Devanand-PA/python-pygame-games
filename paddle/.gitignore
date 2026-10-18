@@ -1,3 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Build artifacts
 build/
 dist/
 main.spec
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Saves (optional - keep if you want to track saves)
+# saves/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/

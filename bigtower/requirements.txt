@@ -1,0 +1,8 @@
+# Big Tower - tower defense game
+# Install with:  pip install -r requirements.txt
+# Or with uv:    uv sync
+pygame>=2.6
+numpy>=2.0
+
+# Optional, only needed for build.py / build.sh:
+# pyinstaller>=6.0

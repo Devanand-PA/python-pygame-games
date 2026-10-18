@@ -1,0 +1,4 @@
+# Paddle - Breakout style game with gravity
+# Install with:  pip install -r requirements.txt
+# Or with uv:    uv sync
+pygame-ce>=2.5.6

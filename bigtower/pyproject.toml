@@ -1,0 +1,21 @@
+[project]
+name = "big-tower"
+version = "0.1.0"
+description = "A tower defense game built with pygame"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pygame>=2.6",
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+# For build.py / build.sh (standalone executables): pip install pyinstaller
+build = [
+    "pyinstaller>=6.0",
+]
+
+# This is a runnable game, not an installable library:
+# `uv sync` installs dependencies into .venv without packaging the project.
+[tool.uv]
+package = false

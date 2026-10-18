@@ -1,0 +1,14 @@
+[project]
+name = "paddle"
+version = "1.0.0"
+description = "A simple meme game made with pygame, breakout style game with gravity, dissipation, etc."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pygame-ce>=2.5.6",
+]
+
+# This is a runnable game, not an installable library:
+# `uv sync` installs dependencies into .venv without packaging the project.
+[tool.uv]
+package = false
