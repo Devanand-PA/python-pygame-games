@@ -606,6 +606,253 @@ class MultiSelect:
 
 
 # ---------------------------------------------------------------------------
+# upgrade branch editor
+# ---------------------------------------------------------------------------
+UPGRADE_GAIN_KEYS = ("damage", "range", "rate", "hp")
+UPGRADE_GAIN_LABELS = {"damage": "dmg", "range": "range", "rate": "rate",
+                       "hp": "hp"}
+
+
+def default_upgrade_paths():
+    """The five default branches (imported lazily to avoid a cycle)."""
+    from core.content import DEFAULT_UPGRADE_PATHS
+    return [{"id": p["id"], "name": p["name"], "gains": dict(p["gains"])}
+            for p in DEFAULT_UPGRADE_PATHS]
+
+
+def clean_upgrade_path(path, fallback_id="path"):
+    """One branch with every gain key spelled out, so it round-trips exactly.
+
+    ``normalise_upgrade_paths`` drops branches with a blank id or no gains at
+    all, so the editor never emits one: gains always carry all four multipliers
+    (1.0 == no change) and the id/name fall back to something printable.
+    """
+    pid = str(path.get("id") or "").strip() or fallback_id
+    name = str(path.get("name") or "").strip() or pid.replace("_", " ").title()
+    raw = path.get("gains") or {}
+    gains = {}
+    for key in UPGRADE_GAIN_KEYS:
+        try:
+            value = float(raw.get(key, 1.0))
+        except (TypeError, ValueError):
+            value = 1.0
+        gains[key] = round(max(0.01, value), 4)
+    try:
+        shots = int(raw.get("projectiles") or 0)
+    except (TypeError, ValueError):
+        shots = 0
+    gains["projectiles"] = shots
+    return {"id": pid, "name": name, "gains": gains}
+
+
+class UpgradePathEditor:
+    """Compact editor for a unit's upgrade branches.
+
+    Left: the branch list plus add / del / reset-to-default.  Right: the
+    selected branch's id, name, four gain multipliers and an additive projectile
+    count.  ``paths`` is always a list of ``{"id", "name", "gains"}`` dicts in
+    exactly the shape ``core.content`` reads back, so save + reload is lossless.
+    """
+
+    def __init__(self, ctx, rect, on_change=None):
+        self.ctx = ctx
+        self.rect = pygame.Rect(rect)
+        self.on_change = on_change
+        self.paths = []
+        self.index = -1
+
+        list_w = 168
+        self.list = ScrollList(ctx, pygame.Rect(self.rect.x + 6, self.rect.y + 26,
+                                               list_w, self.rect.height - 56),
+                               [], on_select=self._on_select)
+        bw, bh = (list_w - 8) // 3, 24
+        by = self.list.rect.bottom + 4
+        self.add_btn = Btn(ctx, (self.list.rect.x, by, bw, bh), "add", self.add)
+        self.del_btn = Btn(ctx, (self.list.rect.x + bw + 4, by, bw, bh), "del",
+                           self.remove, color=(90, 54, 54))
+        self.def_btn = Btn(ctx, (self.list.rect.x + 2 * (bw + 4), by, bw, bh),
+                           "default", self.restore_defaults)
+
+        fx = self.list.rect.right + 10
+        fw = self.rect.right - 6 - fx
+        self.fields = {
+            "id": TextField(ctx, pygame.Rect(fx, self.rect.y + 26, fw // 2 - 4, 24),
+                            "id", label_w=40),
+            "name": TextField(ctx, pygame.Rect(fx + fw // 2 + 4, self.rect.y + 26,
+                                               fw // 2 - 4, 24), "name", label_w=56),
+        }
+        gain_w = (fw - 3 * 6) // 4
+        for i, key in enumerate(UPGRADE_GAIN_KEYS):
+            self.fields[key] = FloatField(
+                ctx, pygame.Rect(fx + i * (gain_w + 6), self.rect.y + 58,
+                                 gain_w, 24),
+                UPGRADE_GAIN_LABELS[key], 1.0, label_w=44)
+        self.fields["projectiles"] = IntField(
+            ctx, pygame.Rect(fx, self.rect.y + 90, gain_w, 24), "+shots", 0, label_w=50)
+        self.summary = pygame.Rect(fx, self.rect.y + 124, fw, 22)
+        self.hint = pygame.Rect(fx, self.rect.y + 150, fw, self.rect.height - 156)
+        self.set_paths([])
+
+    # -- data ----------------------------------------------------------------
+    def set_paths(self, paths):
+        """Load branches; an empty/None value means "the shipped defaults"."""
+        paths = [clean_upgrade_path(p) for p in (paths or [])] or default_upgrade_paths()
+        self.paths = paths
+        self.index = 0 if paths else -1
+        self.list.set_items([self._label(p) for p in paths], keep=False)
+        self._load_active()
+
+    @property
+    def value(self):
+        return [clean_upgrade_path(p, "path{}".format(i + 1))
+                for i, p in enumerate(self.paths)]
+
+    def _label(self, path):
+        text = "{}  {}".format(path["id"], path["name"])
+        return text[:22] + "..." if len(text) > 25 else text
+
+    def _active(self):
+        return self.paths[self.index] if 0 <= self.index < len(self.paths) else None
+
+    def _on_select(self, _label):
+        if 0 <= self.list.index < len(self.paths):
+            self.index = self.list.index
+        self._load_active()
+
+    def _load_active(self):
+        path = self._active()
+        for key, field in self.fields.items():
+            if path is None:
+                field.set_value(1.0 if key in UPGRADE_GAIN_KEYS else
+                                ("" if key in ("id", "name") else 0))
+            elif key in ("id", "name"):
+                field.set_value(path[key])
+            elif key == "projectiles":
+                field.set_value(path["gains"].get("projectiles", 0))
+            else:
+                field.set_value(path["gains"].get(key, 1.0))
+        self._sync_buttons()
+
+    def _store_active(self):
+        """Copy the on-screen field values back into the selected branch."""
+        path = self._active()
+        if path is None:
+            return False
+        before = (path["id"], path["name"], dict(path["gains"]))
+        f = self.fields
+        path["id"] = f["id"].value
+        path["name"] = f["name"].value
+        gains = path["gains"]
+        for key in UPGRADE_GAIN_KEYS:
+            gains[key] = f[key].value
+        gains["projectiles"] = max(0, f["projectiles"].value)
+        return before != (path["id"], path["name"], dict(gains))
+
+    def _sync_buttons(self):
+        self.del_btn.enabled = self._active() is not None
+        self.def_btn.enabled = True
+
+    # -- editing -------------------------------------------------------------
+    def add(self):
+        taken = {p["id"] for p in self.paths}
+        base, n = "path", 2
+        while base in taken:
+            base, n = "path{}".format(n), n + 1
+        self.paths.append({"id": base, "name": base.title(),
+                           "gains": dict({k: 1.0 for k in UPGRADE_GAIN_KEYS},
+                                         projectiles=0)})
+        self.index = len(self.paths) - 1
+        self._rebuild()
+        self._notify()
+
+    def remove(self):
+        if not (0 <= self.index < len(self.paths)):
+            return
+        self.paths.pop(self.index)
+        self.index = min(self.index, len(self.paths) - 1)
+        self._rebuild()
+        self._notify()
+
+    def restore_defaults(self):
+        self.set_paths(default_upgrade_paths())
+        self._notify()
+
+    def _rebuild(self):
+        self.list.set_items([self._label(p) for p in self.paths], keep=False)
+        self.list.index = self.index if self.paths else -1
+        self.list._clamp()
+        self._load_active()
+
+    def _refresh_labels(self):
+        """Update only the list captions (typing must not steal the cursor)."""
+        selected = self.list.selected
+        self.list.items = [self._label(p) for p in self.paths]
+        if selected in self.list.items:
+            self.list.index = self.list.items.index(selected)
+        self.list._clamp()
+
+    def _notify(self):
+        if self.on_change is not None:
+            self.on_change(self)
+
+    # -- events --------------------------------------------------------------
+    def handle_event(self, event):
+        if self.list.handle_event(event):
+            return True
+        for btn in (self.add_btn, self.del_btn, self.def_btn):
+            if btn.handle_event(event):
+                return True
+        before = self._signature()
+        for field in self.fields.values():
+            if field.handle_event(event):
+                self._store_active()
+                if self._signature() != before:
+                    self._refresh_labels()
+                    self._notify()
+                return True
+        return False
+
+    def _signature(self):
+        return repr(self.paths)
+
+    # -- drawing -------------------------------------------------------------
+    def draw(self, canvas):
+        pygame.draw.rect(canvas, PANEL, self.rect, border_radius=6)
+        pygame.draw.rect(canvas, EDGE, self.rect, 1, border_radius=6)
+        font = self.ctx.fonts["small"]
+        title = font.render("Upgrade paths (multipliers; 1.0 = unchanged)",
+                            True, TEXT)
+        canvas.blit(title, (self.rect.x + 8, self.rect.y + 6))
+        self.list.draw(canvas)
+        for btn in (self.add_btn, self.del_btn, self.def_btn):
+            btn.draw(canvas)
+        path = self._active()
+        for field in self.fields.values():
+            field.draw(canvas)
+        if path is None:
+            note = font.render("no branches", True, DIM)
+            canvas.blit(note, note.get_rect(center=self.summary.center))
+            return
+        g = self.fields  # the values on screen are the ones that get saved
+        text = ("gains  x{:.2f} dmg   x{:.2f} range   x{:.2f} rate   "
+                "x{:.2f} hp   +{} shot{}".format(
+                    g["damage"].value, g["range"].value, g["rate"].value,
+                    g["hp"].value, max(0, g["projectiles"].value),
+                    "" if max(0, g["projectiles"].value) == 1 else "s"))
+        canvas.blit(font.render(text, True, OK), (self.summary.x, self.summary.y))
+        y = self.hint.y
+        for line in ("Left click a branch to edit it, the wheel scrolls the list.",
+                     "Every gain is always written out, so save + reload keeps",
+                     "exactly what you typed.  'default' restores the five",
+                     "shipped branches (damage / range / rapid / multi / vitality)."):
+            canvas.blit(font.render(line, True, DIM), (self.hint.x, y))
+            y += 18
+
+    def value_signature(self):     # kept for the parent tab's change detection
+        return repr(self.paths)
+
+
+# ---------------------------------------------------------------------------
 # buttons
 # ---------------------------------------------------------------------------
 class Btn:

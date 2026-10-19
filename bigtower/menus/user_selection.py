@@ -70,19 +70,23 @@ class Scene(Scene):
         y = self.userlist.rect.bottom + 22
 
         gap = 14
-        bw = (cw - gap) // 2
+        bw = (cw - gap * 2) // 3
         self.play_btn = Button(game, (x, y), (bw, btn_h), text="Play",
                                function=self.confirm)
-        self.cancel_btn = Button(game, (x + bw + gap, y), (bw, btn_h),
+        self.delete_btn = Button(game, (x + bw + gap, y), (bw, btn_h),
+                                 text="Delete", function=self.request_delete)
+        self.cancel_btn = Button(game, (x + 2 * (bw + gap), y), (bw, btn_h),
                                  text="Cancel", function=self.close_overlay)
-        self.buttons = [self.play_btn, self.cancel_btn]
+        self.buttons = [self.play_btn, self.delete_btn, self.cancel_btn]
         self.play_btn.sel = True
         y += btn_h + 14
 
         self.status = ""
+        self.status_color = (240, 120, 120)     # errors show red by default
         self.status_pos = (self.box.centerx, y + sub_h // 2)
         self._last_click_ms = 0
         self._last_click_row = None
+        self._confirm_delete = None      # name awaiting a second click
 
     # ---------------------------------------------------------------- actions
     def confirm(self):
@@ -101,6 +105,67 @@ class Scene(Scene):
         self.game.play("place", 0.5)
         self.close_and_continue()
 
+    # ---------------------------------------------------------------- delete
+    def request_delete(self):
+        """First click arms the delete, second click performs it.
+
+        Deleting a profile cannot be undone, so it is always two steps and the
+        button relabels itself to say exactly what will happen.
+        """
+        name = self.input.text.strip()
+        if not name:
+            self._set_status("Pick a saved user to delete.")
+            self.game.play("error", 0.5)
+            return
+        if not savestate.user_exists(name):
+            self._set_status("'{}' has no saved data.".format(name))
+            self.game.play("error", 0.5)
+            return
+        if self._confirm_delete != name:
+            self._confirm_delete = name
+            self.delete_btn.set_text("Really delete?")
+            self._set_status("This erases '{}' permanently.".format(name), warn=True)
+            self.game.play("error", 0.4)
+            return
+        self._do_delete(name)
+
+    def _do_delete(self, name):
+        self._cancel_delete()
+        try:
+            deleted, errors = savestate.delete_user(name)
+        except ValueError:
+            self._set_status("That name can't be deleted.")
+            self.game.play("error", 0.5)
+            return
+        if deleted == 0:
+            self._set_status("Nothing to delete for '{}'.".format(name))
+            self.game.play("error", 0.5)
+            return
+        # drop it from the picker and forget it if it was the active profile
+        self.users = [u for u in self.users if u != name]
+        self.userlist.set_items(self.users)
+        self.input.set_text("")
+        self.input.sel = True
+        if self.game.user == name:
+            self.game.set_user("")        # also clears the remembered last_user
+        elif self.game.settings.get("last_user") == name:
+            self.game.settings["last_user"] = ""
+            self.game.save_config()
+        if errors:
+            self._set_status("Deleted, but {} folder(s) were read-only.".format(
+                len(errors)), warn=True)
+        else:
+            self._set_status("Deleted '{}'.".format(name))
+        self.game.play("sell", 0.5)
+
+    def _set_status(self, message, warn=False):
+        self.status = message
+        self.status_color = ((240, 190, 120) if warn else (150, 220, 150))
+
+    def _cancel_delete(self):
+        self._confirm_delete = None
+        self.delete_btn.set_text("Delete")
+
     def close_and_continue(self):
         if self in self.game.subscenes:
             self.game.subscenes.remove(self)
@@ -113,6 +178,7 @@ class Scene(Scene):
         self.input.set_text(name)
         self.input.sel = True
         self.status = ""
+        self._cancel_delete()
 
     def _activate_row(self):
         name = self.userlist.sel_text
@@ -137,6 +203,7 @@ class Scene(Scene):
                 return
             self.input.handle_event(event)
             self.status = ""
+            self._cancel_delete()
         elif event.type == pygame.MOUSEMOTION:
             self.userlist.handle_event(event)
             for b in self.buttons:
@@ -208,5 +275,6 @@ class Scene(Scene):
         for b in self.buttons:
             b.on_draw()
         if self.status:
-            surf = self.game.fonts["small"].render(self.status, True, (240, 120, 120))
+            surf = self.game.fonts["small"].render(self.status, True,
+                                                   self.status_color)
             self.game.canvas.blit(surf, surf.get_rect(center=self.status_pos))

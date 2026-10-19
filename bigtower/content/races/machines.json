@@ -33,5 +33,6 @@
     "machines_01",
     "machines_02",
     "machines_03"
-  ]
+  ],
+  "hero": "colossus"
 }

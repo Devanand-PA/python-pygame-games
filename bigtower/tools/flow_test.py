@@ -455,17 +455,28 @@ def main():
     check("every shop unit can be previewed",
           all(stats_panel.stat_rows(u) for u in big.shop_units),
           f"{len(big.shop_units)} units")
-    base = stats_panel.scaled_stats(shop_type, 1)
-    upg = stats_panel.scaled_stats(shop_type, 2)
-    check("shop stats show what an upgrade improves",
-          upg["damage"] > base["damage"] and upg["hp"] > base["hp"]
-          and upg["rate"] > base["rate"],
-          f"dmg {base['damage']:.1f}->{upg['damage']:.1f} "
-          f"hp {base['hp']}->{upg['hp']}")
+    base = stats_panel.scaled_stats(shop_type)
+    dmg_path = shop_type.upgrade_path("damage")
+    multi_path = shop_type.upgrade_path("multi")
+    upg_dmg = stats_panel.scaled_stats(shop_type, [dmg_path])
+    upg_multi = stats_panel.scaled_stats(shop_type, [multi_path])
+    check("shop stats show what each upgrade branch improves",
+          upg_dmg["damage"] > base["damage"]
+          and upg_dmg["hp"] == base["hp"]
+          and upg_multi["shots"] == base["shots"] + 1,
+          f"dmg {base['damage']:.1f}->{upg_dmg['damage']:.1f} "
+          f"shots {base['shots']}->{upg_multi['shots']}")
     rows_preview = stats_panel.stat_rows(shop_type)
-    check("shop stat rows carry an upgrade preview",
-          any(row[2] for row in rows_preview) and
-          any(row[0] == "DPS" for row in rows_preview))
+    check("shop stat rows list DPS and the upgrade branches",
+          any(row[0] == "DPS" for row in rows_preview)
+          and len(stats_panel.path_rows(shop_type)) >= 3,
+          f"{len(stats_panel.path_rows(shop_type))} branches")
+    # a preview must agree with the real unit after taking the same branch
+    probe = _Unit(shop_type, (0, 0))
+    probe.upgrade("damage")
+    check("the shop preview matches the deployed unit",
+          abs(probe.damage - upg_dmg["damage"]) < 0.01
+          and probe.max_hp == upg_dmg["hp"])
     big._hover_shop = shop_type
     big.mouse_screen = (200, 300)
     game.on_draw()
@@ -550,15 +561,235 @@ def main():
     twr = next(iter(scene.towers_by_cell.values()))
     scene.selected_unit = twr
     scene.gold += 2000
-    scene._panel_click(scene._panel_upgrade_rect().center)
-    check("upgrade works", twr.level == 2)
+    branches = scene._panel_upgrade_rects()
+    scene._panel_click(branches[0][0].center)
+    check("upgrade works", twr.level == 2,
+          f"took {twr.upgrade_names()}")
     value = twr.sell_value()
     scene._panel_click(scene._panel_sell_rect().center)
     check("sell works", twr not in scene.defenders,
           f"refund={value}")
 
+    # ------------------------------------------------ branching upgrade paths
+    scout = GameScene(game, level_id)
+    game.scene = scout
+    probe = next(u for u in scout.shop_units if u.upgrade_paths)
+    probe_name = probe.id
+    cell = next((x, y) for y in range(scout.level.rows_n)
+                for x in range(scout.level.cols)
+                if scout.level.is_buildable(x, y))
+    scout.selected_shop = probe
+    scout.gold = 5000
+    scout._try_place(cell)
+    built = scout.towers_by_cell[cell]
+    check("a defender starts with several upgrade branches",
+          len(built.upgrade_choices) >= 3,
+          f"{[p['id'] for p in built.upgrade_choices]} ({probe_name})")
+    scout.selected_unit = built
+    dmg_rect = next(r for r, p in scout._panel_upgrade_rects()
+                    if p["id"] == "damage")
+    multi_rect = next(r for r, p in scout._panel_upgrade_rects()
+                      if p["id"] == "multi")
+    base_damage = built.damage
+    scout._panel_click(dmg_rect.center)
+    check("taking the damage branch raises damage only",
+          built.damage > base_damage and built.range == probe.range
+          and built.projectiles == probe.projectiles,
+          f"dmg {base_damage:.1f}->{built.damage:.1f}")
+    scout.selected_unit = built
+    scout._panel_click(multi_rect.center)
+    check("taking the multi-shot branch adds a projectile",
+          built.projectiles == probe.projectiles + 1,
+          f"shots={built.projectiles}")
+    check("branches stack and are remembered",
+          built.level == 3 and built.upgrade_names() == ["Damage", "Multi Shot"]
+          and built.upgrade_choices == [],
+          f"{built.upgrade_names()}")
+
+    # multi-shot actually fires several projectiles at once
+    shots_seen = []
+
+    def _count_projectile(unit, target):
+        shots_seen.append(target)
+    mob = next((a for a in scout.attackers), None)
+    fake = []
+    for i in range(4):
+        t = _Unit(scout.content.unit(
+            scout.level_def["enemy_pool"][0]), (0, 0))
+        t.base_pos = (400, 0)
+        t.pos = [300 + i * 30, 0]      # inside the gun's 135px range
+        fake.append(t)
+    sniper = _Unit(probe, (400, 0), base_pos=(0, 0))
+    sniper.upgrade("damage")
+    sniper.upgrade("multi")
+    sniper.cooldown_left = 0.0
+    fired = sniper.update(0.016, fake, [], _count_projectile, scout.effects)
+    check("a multi-shot unit fires one projectile per shot",
+          fired and len(shots_seen) == sniper.projectiles,
+          f"shots={len(shots_seen)} expected={sniper.projectiles}")
+    game.scene = scene
+
+    # ------------------------------------------------------- passive gold
+    earner = GameScene(game, level_id)
+    game.scene = earner
+    rate = earner.income_rate
+    check("a level has a passive income rate", rate > 0, f"{rate}/s")
+
+    # income must NOT accrue during the build phase
+    earner.state = "build"
+    earner.first_wave_pending = False
+    earner.countdown = 99.0
+    build_start = earner.gold
+    for _ in range(120):
+        earner._step(1 / 60.0)
+    check("no passive gold is paid during the build phase",
+          earner.gold == build_start,
+          f"gained={earner.gold - build_start:.3f} over 2s in build")
+
+    # ... but it must accrue while a wave is running
+    earner.state = "wave"
+    earner.countdown = 0.0
+    # park a spawn far in the future: the wave never completes, so the only
+    # thing that can move the gold here is the passive income
+    earner.spawn_queue = [(1e9, "__no_such_unit__")]
+    wave_start = earner.gold
+    for _ in range(120):
+        earner._step(1 / 60.0)
+    check("passive gold accrues while a wave is in progress",
+          abs((earner.gold - wave_start) - rate * 2.0) < 0.5,
+          f"rate={rate}/s gained={earner.gold - wave_start:.1f} over 2s")
+
+    flat = GameScene(game, level_id)
+    game.scene = flat
+    flat.level_def = dict(flat.level_def, gold_per_sec=0.0)
+    flat = GameScene(game, level_id)
+    flat.level_def = dict(flat.level_def, gold_per_sec=0.0)
+    flat.income_rate = 0.0
+    flat.state = "wave"
+    flat.spawn_queue = [(1e9, "__no_such_unit__")]
+    before = flat.gold
+    for _ in range(60):
+        flat._step(1 / 60.0)
+    check("a level can set no passive income", flat.gold == before)
+
+    from engine.game_scene import _gold as _whole_gold
+    messy = GameScene(game, level_id)
+    game.scene = messy
+    messy.level_def = dict(messy.level_def, gold_per_sec=1.7)
+    messy = GameScene(game, level_id)          # re-read gold_per_sec
+    messy.gold = 0.0
+    messy.state = "wave"
+    messy.spawn_queue = [(1e9, "__no_such_unit__")]
+    for _ in range(37):                        # 37/60 * 1.7 -> not a whole number
+        messy._step(1 / 60.0)
+    frac = messy.gold
+    check("gold is tracked as a fraction but displayed as whole coins",
+          isinstance(frac, float) and frac != int(frac)
+          and _whole_gold(frac) == int(frac)
+          and _whole_gold(193.0859999) == 193
+          and _whole_gold(0.4) == 0 and _whole_gold(42.0) == 42
+          and _whole_gold(-3) == 0,
+          f"stored={frac!r} shown={_whole_gold(frac)}")
+
+    # --------------------------------------------- calling waves early pays
+    caller = GameScene(game, level_id)
+    game.scene = caller
+    caller.state = "build"
+    caller.first_wave_pending = False
+    caller.wave_number = 1                     # pretend wave 1 is done
+    caller.countdown = _S.WAVE_COUNTDOWN
+    full = caller.early_call_bonus()
+    caller.countdown = _S.WAVE_COUNTDOWN / 2.0
+    half = caller.early_call_bonus()
+    check("the early-call bonus scales with the time you skip",
+          full > half > 0 and full >= 2 * half - 1,
+          f"full={full} half={half}")
+    check("the early-call bonus is worth chasing",
+          full >= int(2 * _S.WAVE_COUNTDOWN),
+          f"{full}g for a full {int(_S.WAVE_COUNTDOWN)}s countdown")
+    check("calling a wave with no countdown owed pays nothing",
+          (setattr(caller, "countdown", 0.0), caller.early_call_bonus())[1] == 0)
+    caller.countdown = _S.WAVE_COUNTDOWN
+    promised = caller.early_call_bonus()
+    gold_before = caller.gold
+    caller.start_wave(early=True)
+    check("calling early pays exactly what the button promised",
+          caller.gold - gold_before == promised and caller.state == "wave",
+          f"+{caller.gold - gold_before:g} shown=+{promised}g")
+    game.scene = scene
+
+    # ------------------------------------------------------- base and hero
+    check("the race defines a hero unit",
+          scene.hero_type is not None
+          and scene.hero_type.id == scene.race.get("hero"),
+          f"{getattr(scene.hero_type, 'name', None)}")
+    base = scene.base_center()
+    check("the base starts at level 1 and costs more to upgrade",
+          scene.base_level == 1
+          and scene.base_upgrade_cost() == int(round(_S.BASE_UPGRADE_COST)))
+
+    guard = scene.hero_type
+    scene.gold = 10000
+    hero_cost = scene.base_upgrade_cost()
+    ok_base = scene.upgrade_base()
+    check("upgrading the base spends gold and raises its level",
+          ok_base and scene.base_level == 2 and scene.gold == 10000 - hero_cost,
+          f"level={scene.base_level} gold={scene.gold}")
+    for _ in range(_S.BASE_MAX_LEVEL):
+        scene.upgrade_base()
+    check("the base stops upgrading at its maximum",
+          scene.base_level == _S.BASE_MAX_LEVEL
+          and scene.base_upgrade_cost() is None)
+
+    # the hero only answers a threat near the base
+    scene.defenders = [d for d in scene.defenders if not getattr(d, "is_hero", False)]
+    scene.hero = None
+    scene.hero_respawn = 0.0
+    far = scene.level.cell_center(scene.level.spawn_cell)
+    scene.attackers = [_Unit(scene.content.unit(
+        scene.level_def["enemy_pool"][0]), far,
+        base_pos=base, waypoints=scene.level.waypoints)]
+    check("no hero while the base is safe", scene.call_hero() is None)
+
+    near = _Unit(scene.content.unit(scene.level_def["enemy_pool"][0]),
+                 (base[0] + 10, base[1] + 10),
+                 base_pos=base, waypoints=scene.level.waypoints)
+    scene.attackers = [near]
+    hero = scene.call_hero()
+    check("an attacker reaching the base calls the hero",
+          hero is not None and hero.is_hero and hero.alive
+          and hero in scene.defenders,
+          f"{getattr(hero.type, 'name', None)} calls={scene.hero_calls}")
+    check("the base level strengthens the hero",
+          hero.damage > guard.damage and hero.max_hp > guard.hp,
+          f"dmg {guard.damage:.0f}->{hero.damage:.0f} hp {guard.hp}->{hero.max_hp}")
+    scene.selected_unit = hero
+    scene.gold = 5000
+    check("the hero cannot be upgraded directly, only through the base",
+          scene._panel_upgrade_rects() == [])
+    scene._panel_click(scene._panel_sell_rect().center)
+    check("the hero cannot be sold", hero in scene.defenders)
+
+    # the hero actually fights
+    scene.attackers = [near]
+    near_hp = near.hp
+    hero_pos = list(hero.pos)
+    shots = len(scene.projectiles)
+    for _ in range(240):
+        hero.update(1 / 60.0, scene.attackers, scene.defenders,
+                    scene._fire, scene.effects)
+    check("the hero fights attackers on its own",
+          (not near.alive or near.hp < near_hp or len(scene.projectiles) > shots),
+          f"target hp {near_hp:.0f}->{near.hp:.0f} alive={near.alive} "
+          f"shots={len(scene.projectiles) - shots}")
+
     scene.selected_shop = None
     scene.selected_unit = None
+    scene.base_selected = False
+    scene.defenders = [d for d in scene.defenders if not getattr(d, "is_hero", False)]
+    scene.attackers = []
+    scene.hero = None
+    game.scene = scene
     scene.first_wave_pending = False
     scene.start_wave()
     fast_forward(scene, 3000)
@@ -572,6 +803,66 @@ def main():
           level_id in (stats.get("Levels Completed") or []), str(stats))
     check("kills recorded", stats.get("Kills", 0) == scene.session_kills,
           f"{stats.get('Kills')} vs {scene.session_kills}")
+
+    # ------------------------------------------------------------ delete user
+    from menus.user_selection import Scene as UserScene
+    from core import savestate as _savestate
+    from core import paths as _paths
+    for who in ("DelMe", "DelKeep"):
+        _savestate.create_user(who)
+        _savestate.update_stats(who, Kills=5)
+    check("profiles are created and listed",
+          {"DelMe", "DelKeep"} <= set(_savestate.list_users()),
+          str(_savestate.list_users()))
+
+    rejected = []
+    for bad in ("", "   ", ".", "..", "_config", "a/b", "a\\b"):
+        try:
+            _savestate.delete_user(bad)
+        except ValueError:
+            rejected.append(bad)
+    check("delete_user refuses dangerous names",
+          len(rejected) == 7 and _paths.saves_root().joinpath("_config").is_dir(),
+          f"rejected {len(rejected)}/7; _config intact="
+          f"{_paths.saves_root().joinpath('_config').is_dir()}")
+
+    game.set_user("DelKeep")
+    pick = UserScene(game, list(_savestate.list_users()))
+    game.subscenes.append(pick)
+    pick.request_delete()
+    check("deleting with nothing selected is refused",
+          pick.status.startswith("Pick"), pick.status)
+
+    pick.input.set_text("DelMe")
+    pick.request_delete()
+    check("the first Delete click only arms the delete",
+          pick._confirm_delete == "DelMe" and _savestate.user_exists("DelMe")
+          and pick.delete_btn.text != "Delete", pick.status)
+    pick._pick("DelKeep")
+    check("changing the selection disarms the delete",
+          pick._confirm_delete is None and pick.delete_btn.text == "Delete")
+
+    pick.input.set_text("DelMe")
+    pick.request_delete()
+    pick.request_delete()
+    check("the second Delete click erases the profile",
+          not _savestate.user_exists("DelMe"), pick.status)
+    check("the erased profile's stats are gone too",
+          _savestate.load_stats("DelMe").get("Kills", 0) == 0
+          and not _paths.find_existing_user_dir("DelMe"))
+    check("the erased profile leaves the picker",
+          "DelMe" not in pick.users and "DelMe" not in pick.userlist.items,
+          str(pick.users))
+    check("other profiles are untouched", _savestate.user_exists("DelKeep"))
+
+    pick.input.set_text("DelKeep")
+    pick.request_delete()
+    pick.request_delete()
+    check("deleting the active profile logs it out",
+          not _savestate.user_exists("DelKeep")
+          and game.user is None and game.settings["last_user"] == "",
+          f"user={game.user} last={game.settings['last_user']!r}")
+    game.subscenes.remove(pick)
 
     # ---------------------------------------------------------------- defeat
     from engine.game_scene import GameScene

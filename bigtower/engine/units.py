@@ -21,8 +21,18 @@ import pygame
 from core import settings as S
 from engine import art
 
+# levels bought on the base strengthen the race hero by these factors
+BASE_HERO_GAINS = {
+    "damage": S.BASE_HERO_DAMAGE_GAIN,
+    "hp": S.BASE_HERO_HP_GAIN,
+    "range": S.BASE_HERO_RANGE_GAIN,
+}
+
 
 class Unit:
+    #: set on the race hero, which the player upgrades via the base instead
+    is_hero = False
+
     def __init__(self, utype, pos, *, base_pos=None, waypoints=None,
                  wave_number=1, home=None, race_tint=None):
         self.type = utype
@@ -40,6 +50,8 @@ class Unit:
 
         # defenders get upgrade-driven scaling, attackers get wave scaling
         self.level = 1
+        self.upgrades = []          # [{"id","name","gains"}, ...] one per step
+        self.base_bonus = 0         # hero only: levels bought on the base
         self.invested = utype.cost
         self.kills = 0
         self._wave_scale = 1.0 + 0.10 * max(0, wave_number - 1) if utype.is_attacker else 1.0
@@ -73,10 +85,23 @@ class Unit:
         self.hp = self.max_hp
 
     # ------------------------------------------------------------- stats
+    def _gain(self, key):
+        """Product of the chosen upgrade branches' multipliers for ``key``."""
+        product = 1.0
+        for path in self.upgrades:
+            product *= path["gains"].get(key, 1.0)
+        return product
+
+    def _hero_gain(self, key):
+        """Bonus from levels bought on the base (heroes only)."""
+        if not self.base_bonus:
+            return 1.0
+        return BASE_HERO_GAINS[key] ** self.base_bonus
+
     def _base_max_hp(self):
         hp = self.type.hp
         if self.type.is_defender:
-            hp *= S.UNIT_HP_GAIN ** (self.level - 1)
+            hp *= self._gain("hp") * self._hero_gain("hp")
         else:
             hp *= self._wave_scale
         return max(1, int(round(hp)))
@@ -85,22 +110,37 @@ class Unit:
     def damage(self):
         dmg = self.type.damage
         if self.type.is_defender:
-            dmg *= S.UNIT_DAMAGE_GAIN ** (self.level - 1)
+            dmg *= self._gain("damage") * self._hero_gain("damage")
         return dmg
 
     @property
     def range(self):
         rng = self.type.range
         if self.type.is_defender:
-            rng *= S.UNIT_RANGE_GAIN ** (self.level - 1)
+            rng *= self._gain("range") * self._hero_gain("range")
         return rng
 
     @property
     def cooldown(self):
         cd = self.type.cooldown
         if self.type.is_defender:
-            cd *= S.UNIT_RATE_GAIN ** (self.level - 1)
+            cd *= self._gain("rate")
         return max(0.01, cd)
+
+    @property
+    def projectiles(self):
+        """Shots fired per attack; upgrade branches add to the type's count."""
+        shots = self.type.projectiles
+        for path in self.upgrades:
+            shots += path["gains"].get("projectiles", 0)
+        return max(1, int(shots))
+
+    @property
+    def upgrade_choices(self):
+        """Branches still available for this unit's next level."""
+        if self.type.is_attacker or self.level >= S.UNIT_MAX_LEVEL:
+            return []
+        return [p for p in self.type.upgrade_paths]
 
     @property
     def progress(self):
@@ -147,17 +187,45 @@ class Unit:
     def sell_value(self):
         return int(self.invested * S.SELL_RATIO)
 
-    def upgrade(self):
+    def upgrade(self, path_id=None):
+        """Take an upgrade step along ``path_id``.
+
+        With no argument the strongest first branch is used, which keeps older
+        callers (and single-click flows) working; the game scene passes the
+        branch the player actually chose.
+        """
+        choices = self.upgrade_choices
+        if not choices:
+            return False
+        if path_id is None:
+            path_id = choices[0]["id"]
+        path = self.type.upgrade_path(path_id)
+        if path is None:
+            return False
         cost = self.upgrade_cost()
         if cost is None:
             return False
+        self.upgrades.append({"id": path["id"], "name": path["name"],
+                              "gains": dict(path["gains"])})
         self.level += 1
         self.invested += cost
-        ratio = self.hp / max(1, self.max_hp)
-        self.max_hp = self._base_max_hp()
-        self.hp = min(self.max_hp, max(self.hp, int(self.max_hp * ratio)))
-        self.hp = self.max_hp
+        self._refresh_max_hp()
         return True
+
+    def upgrade_names(self):
+        """The branches taken so far, for the UI ("Damage > Rapid Fire")."""
+        return [p["name"] for p in self.upgrades]
+
+    def apply_base_bonus(self, level):
+        """Re-scale a hero after the base is upgraded."""
+        self.base_bonus = max(0, int(level))
+        ratio = self.hp / max(1, self.max_hp)
+        self._refresh_max_hp()
+        self.hp = min(self.max_hp, max(1, int(self.max_hp * ratio)))
+
+    def _refresh_max_hp(self):
+        self.max_hp = self._base_max_hp()
+        self.hp = min(self.max_hp, max(1, int(self.max_hp)))
 
     # ------------------------------------------------------------- combat
     def update(self, dt, attackers, defenders, spawn_projectile, effects=None):
@@ -211,7 +279,7 @@ class Unit:
         if target is not None:
             self.heading = art.angle_between(self.pos, target.pos)
             if self.cooldown_left <= 0 and self._dist(target.pos) <= self.range:
-                return self._do_attack(target, spawn_projectile, effects)
+                return self._do_attack(target, spawn_projectile, effects, attackers)
         return False
 
     def _update_attacker(self, dt, defenders, spawn_projectile, effects):
@@ -241,7 +309,7 @@ class Unit:
         if target is not None and self.type.attack != "none":
             self.heading = art.angle_between(self.pos, target.pos)
             if self.cooldown_left <= 0 and self._dist(target.pos) <= self.range:
-                fired = self._do_attack(target, spawn_projectile, effects)
+                fired = self._do_attack(target, spawn_projectile, effects, defenders)
 
         # arrival / leak
         if self.type.movement in ("route", "hunt"):
@@ -255,19 +323,51 @@ class Unit:
                 self.alive = False
         return fired
 
-    def _do_attack(self, target, spawn_projectile, effects):
+    def _do_attack(self, target, spawn_projectile, effects, candidates=None):
+        """Fire once. Multi-shot branches fire at up to ``projectiles`` targets."""
         self.cooldown_left = self.cooldown
+        shots = self.projectiles
         if self.type.attack == "projectile":
-            spawn_projectile(self, target)
+            targets = [target]
+            if shots > 1 and candidates:
+                extra = [u for u in self._pick_targets(candidates, self.range, shots)
+                         if u is not target]
+                targets = (extra + [target] * shots)[:shots]
+            for victim in targets:
+                spawn_projectile(self, victim)
             return True
         if self.type.attack == "melee":
-            died = target.take_hit(self.damage)
-            if effects is not None:
-                effects.append(("hit", list(target.pos)))
-            if died:
-                self.kills += 1
+            for _ in range(shots):
+                if not target.alive:
+                    break
+                died = target.take_hit(self.damage)
+                if effects is not None:
+                    effects.append(("hit", list(target.pos)))
+                if died:
+                    self.kills += 1
             return True
         return False
+
+    def _score(self, unit, mode):
+        if mode == "first":
+            return unit.progress
+        if mode == "strongest":
+            return unit.hp
+        if mode == "weakest":
+            return -unit.hp
+        return -((unit.pos[0] - self.pos[0]) ** 2
+                 + (unit.pos[1] - self.pos[1]) ** 2)
+
+    def _in_reach(self, unit, can_air, can_ground, rng2):
+        if not unit.alive or not unit.type.can_be_attacked:
+            return False
+        if unit.is_flying and not can_air:
+            return False
+        if not unit.is_flying and not can_ground:
+            return False
+        d2 = ((unit.pos[0] - self.pos[0]) ** 2
+              + (unit.pos[1] - self.pos[1]) ** 2)
+        return d2 <= rng2
 
     def _pick_target(self, units, rng):
         mode = self.type.default_targeting
@@ -276,27 +376,29 @@ class Unit:
         rng2 = rng * rng
         best, best_score = None, None
         for unit in units:
-            if not unit.alive or not unit.type.can_be_attacked:
+            if not self._in_reach(unit, can_air, can_ground, rng2):
                 continue
-            if unit.is_flying and not can_air:
-                continue
-            if not unit.is_flying and not can_ground:
-                continue
-            d2 = ((unit.pos[0] - self.pos[0]) ** 2
-                  + (unit.pos[1] - self.pos[1]) ** 2)
-            if d2 > rng2:
-                continue
-            if mode == "first":
-                score = unit.progress
-            elif mode == "strongest":
-                score = unit.hp
-            elif mode == "weakest":
-                score = -unit.hp
-            else:                      # nearest
-                score = -d2
+            score = self._score(unit, mode)
             if best_score is None or score > best_score:
                 best_score, best = score, unit
         return best
+
+    def _pick_targets(self, units, rng, count):
+        """The ``count`` best targets in range, best first (used by multi-shot)."""
+        if count <= 1:
+            best = self._pick_target(units, rng)
+            return [best] if best is not None else []
+        mode = self.type.default_targeting
+        can_air = self.type.targets in ("air", "both")
+        can_ground = self.type.targets in ("ground", "both")
+        rng2 = rng * rng
+        scored = []
+        for unit in units:
+            if not self._in_reach(unit, can_air, can_ground, rng2):
+                continue
+            scored.append((self._score(unit, mode), unit))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [u for _s, u in scored[:max(1, count)]]
 
     # ------------------------------------------------------------- movement
     def _dist(self, point):

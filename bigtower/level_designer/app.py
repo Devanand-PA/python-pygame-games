@@ -16,14 +16,15 @@ import sys
 import pygame
 
 from core.content import ContentDB
+from level_designer import layout as L
 from level_designer import tabs as T
 from level_designer import widgets as W
 
-# The tab layouts in tabs.py assume a 1280-wide canvas and a list column tall
-# enough for its four buttons (bottom edge ~828).
-WIDTH = 1280
-HEIGHT = 860
-TAB_H = 32
+# The tab layouts in tabs.py are derived from level_designer.layout, which is
+# sized for the game's 1280x720 canvas.
+WIDTH = L.CANVAS_W
+HEIGHT = L.CANVAS_H
+TAB_H = L.TAB_H
 BAR_BG = (30, 30, 42)
 
 
@@ -189,13 +190,35 @@ class Designer:
                     and self.ctx.modal is None):
                 self.running = False
                 continue
-            if (event.type == pygame.KEYDOWN and event.key == pygame.K_s
-                    and event.mod & pygame.KMOD_CTRL):
-                tab = self.current_tab
-                if hasattr(tab, "save"):
-                    tab.save()
-                continue
+            if event.type == pygame.KEYDOWN and self.ctx.modal is None:
+                if self._hotkey(event):
+                    continue
             self._dispatch(event)
+
+    def _hotkey(self, event):
+        """Ctrl+S save and Ctrl+Z / Ctrl+Y undo, handled before the widgets.
+
+        Doing this here (rather than inside the tab) means a focused TextField
+        never sees the key: ``\x1a`` / ``\x19`` are not printable so the field
+        would swallow them, but undo should still fire while typing.
+        """
+        if not (event.mod & pygame.KMOD_CTRL):
+            return False
+        if event.key == pygame.K_s:
+            tab = self.current_tab
+            if hasattr(tab, "save"):
+                tab.save()
+            return True
+        if event.key in (pygame.K_z, pygame.K_y):
+            tab = self.current_tab
+            if not hasattr(tab, "undo"):
+                return False
+            if event.key == pygame.K_y or (event.mod & pygame.KMOD_SHIFT):
+                tab.redo()
+            else:
+                tab.undo()
+            return True
+        return False
 
     # ----------------------------------------------------------------- render
     def _draw_tab_bar(self):

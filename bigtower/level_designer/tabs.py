@@ -3,19 +3,29 @@
 Each tab owns a working list of plain dicts (mirroring the JSON on disk), a
 list panel to pick one, and a form of widgets to edit it.  Saving writes every
 entry back through :class:`core.content.ContentDB` and removes orphaned files.
+
+Every tab also owns a :class:`~level_designer.history.History`: the undo stack
+holds a snapshot of the item list taken *before* each mutating action, and undo
+puts that snapshot back into the items, the widgets and the map canvas.  Camera
+zoom / pan and list selection never record, because neither changes content.
+
+Geometry comes from :mod:`level_designer.layout` so no widget can drift off the
+1280x720 canvas or into the neighbouring column.
 """
+import json
 from collections import deque
+from copy import deepcopy
 
 import pygame
 
+from core import settings as S
 from engine import art
+from level_designer import layout as L
 from level_designer import widgets as W
+from level_designer.history import History
 
-FORM_X = 330
-FORM_TOP = 64
-ROW_H = 34
-COL_GAP = 24
-LIST = pygame.Rect(10, 54, 300, 700)
+TITLE_KEY = "default"            # section titles use the 30pt face, not the 48pt one
+HERO_NONE = "(none)"
 
 
 def _text(ctx, s, pos, color=W.TEXT, key="small"):
@@ -23,12 +33,128 @@ def _text(ctx, s, pos, color=W.TEXT, key="small"):
     ctx.canvas.blit(surf, pos)
 
 
-class FormTab:
+def _right_text(ctx, s, right_x, y, color=W.TEXT, key="small"):
+    surf = ctx.fonts[key].render(str(s), True, color)
+    ctx.canvas.blit(surf, (right_x - surf.get_width(), y))
+
+
+class UndoMixin:
+    """Snapshot undo/redo + a dirty flag shared by every editor tab."""
+
+    def setup_history(self):
+        self.history = History(self._snapshot, self._restore,
+                               on_change=self._history_changed)
+        self._restoring = False
+        self._recorded = False
+        self._touched = False
+        self._saved_key = self._doc_key()
+
+    # -- to be provided by the editor tabs ---------------------------------
+    def _snapshot(self):
+        raise NotImplementedError
+
+    def _restore(self, state):
+        raise NotImplementedError
+
+    # -- plumbing -----------------------------------------------------------
+    def _doc_key(self):
+        try:
+            return json.dumps(self.items, sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            return repr(self.items)
+
+    @property
+    def dirty(self):
+        return self._doc_key() != self._saved_key
+
+    def mark_saved(self):
+        self._saved_key = self._doc_key()
+
+    def rebase(self):
+        """Re-baseline the dirty flag after a load the user did not ask for.
+
+        ``apply_current`` fills in keys the file simply did not carry yet (a
+        level with no ``gold_per_sec``, say).  Until the designer has actually
+        done something that is still "what is on disk", so it must not show up
+        as an unsaved change.
+        """
+        if not self._touched:
+            self.mark_saved()
+
+    def record(self, label=""):
+        """Call *before* mutating the item list (fields excepted)."""
+        self._touched = True
+        self.history.record(label)
+        self._recorded = True
+
+    def record_state(self, state, label=""):
+        """Undo step from a snapshot taken earlier (e.g. at stroke start)."""
+        self._touched = True
+        self.history.record_state(state, label)
+        self._recorded = True
+
+    def _history_changed(self, _history=None):
+        if self._restoring:
+            return
+        self.sync_history_buttons()
+
+    def sync_history_buttons(self):
+        undo_btn = getattr(self, "undo_btn", None)
+        redo_btn = getattr(self, "redo_btn", None)
+        if undo_btn is not None:
+            undo_btn.enabled = self.history.can_undo
+        if redo_btn is not None:
+            redo_btn.enabled = self.history.can_redo
+
+    def undo(self):
+        if not self.history.undo():
+            self.app.set_status("Nothing left to undo", W.DIM)
+            return False
+        self.app.set_status("Undo: " + self.history.status(), W.OK)
+        return True
+
+    def redo(self):
+        if not self.history.redo():
+            self.app.set_status("Nothing left to redo", W.DIM)
+            return False
+        self.app.set_status("Redo: " + self.history.status(), W.OK)
+        return True
+
+    def undo_key(self, event):
+        """Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z, but only outside a text box."""
+        if event.type != pygame.KEYDOWN or self.ctx.modal is not None:
+            return None
+        if not (event.mod & pygame.KMOD_CTRL):
+            return None
+        if event.key == pygame.K_z:
+            return "redo" if (event.mod & pygame.KMOD_SHIFT) else "undo"
+        if event.key == pygame.K_y:
+            return "redo"
+        return None
+
+    # -- status line --------------------------------------------------------
+    def _draw_history_status(self, x, y, width):
+        state = "unsaved changes" if self.dirty else "saved"
+        _text(self.ctx, state, (x, y), W.BAD if self.dirty else W.OK)
+        _text(self.ctx, self.history.status(), (x, y + 18), W.DIM)
+        self.sync_history_buttons()
+
+    def _draw_title(self, extra=""):
+        mark = " *" if self.dirty else ""
+        _text(self.ctx, "{}{}{}".format(self.title, mark, extra),
+              (L.LIST_X, L.TITLE_Y), W.TEXT, TITLE_KEY)
+
+
+# ===========================================================================
+# form tabs (Terrain / Units / Races)
+# ===========================================================================
+class FormTab(UndoMixin):
     """List of entries on the left, an editable form on the right."""
 
     title = "Form"
     folder = "units"
     save_fn = "save_unit"
+    cols = 2
 
     def __init__(self, app):
         self.app = app
@@ -37,15 +163,18 @@ class FormTab:
         self.current = None
         self.fields = {}
         self.extras = {}
-        self._col_w = (app.canvas.get_width() - FORM_X - 24 - COL_GAP) // 2
-        self.list = W.ScrollList(self.ctx, LIST, [], on_select=self._on_select)
-        bw = (LIST.width - 16) // 2
+        self.col_w, self.col_x = L.columns(self.cols, L.FORM_X, L.FORM_W)
+        self.list = W.ScrollList(self.ctx, L.LIST_RECT, [], on_select=self._on_select)
+        self.undo_btn = self._button(2, 0, "Undo", self.undo)
+        self.redo_btn = self._button(2, 1, "Redo", self.redo)
         self.buttons = [
-            W.Btn(self.ctx, (LIST.x, LIST.bottom + 8, bw, 30), "New", self.new),
-            W.Btn(self.ctx, (LIST.x + bw + 8, LIST.bottom + 8, bw, 30), "Dup", self.duplicate),
-            W.Btn(self.ctx, (LIST.x, LIST.bottom + 44, bw, 30), "Delete", self.delete, color=(90, 54, 54)),
-            W.Btn(self.ctx, (LIST.x + bw + 8, LIST.bottom + 44, bw, 30), "Save", self.save, color=(64, 92, 70)),
+            self._button(0, 0, "New", self.new),
+            self._button(0, 1, "Dup", self.duplicate),
+            self._button(1, 0, "Delete", self.delete, color=(90, 54, 54)),
+            self._button(1, 1, "Save", self.save, color=(64, 92, 70)),
+            self.undo_btn, self.redo_btn,
         ]
+        self.setup_history()
         self.build_fields()
         self.refresh()
 
@@ -78,15 +207,25 @@ class FormTab:
         return item.get("id")
 
     # -- layout -------------------------------------------------------------
+    def _button(self, row, col, text, fn, color=W.PANEL2):
+        rect = (L.LIST_X + col * (L.BTN_W + 8), L.BTN_ROWS[row], L.BTN_W, L.BTN_H)
+        return W.Btn(self.ctx, rect, text, fn, color=color)
+
     def place(self, name, col, row, span=1, label_w=None):
-        width = self._col_w * span + COL_GAP * (span - 1)
-        rect = pygame.Rect(FORM_X + col * (self._col_w + COL_GAP),
-                           FORM_TOP + row * ROW_H, width, ROW_H - 4)
+        width = self.col_w * span + L.COL_GAP * (span - 1)
+        rect = L.row_rect(row, self.col_x[col], width)
         field = self.fields[name]
         field.set_rect(rect)
         if label_w is not None:
             field.label_w = label_w
         return field
+
+    def rows_used(self):
+        return (len(self.fields) + self.cols - 1) // self.cols
+
+    def below_form(self):
+        """Y of the first free row under the form grid."""
+        return L.TOP + self.rows_used() * L.ROW_H + 8
 
     # -- list ops -----------------------------------------------------------
     def refresh(self, select=None):
@@ -120,16 +259,42 @@ class FormTab:
         idx = self.items.index(self.current)
         self.items[idx] = data
         self.current = data
+        self.rebase()
+
+    # -- undo ---------------------------------------------------------------
+    def _snapshot(self):
+        return {"items": deepcopy(self.items),
+                "selected": self.item_id(self.current) if self.current else None}
+
+    def _restore(self, state):
+        self._restoring = True
+        try:
+            self.items[:] = deepcopy(state["items"])
+            selected = None
+            for item in self.items:
+                if self.item_id(item) == state["selected"]:
+                    selected = item
+            self.refresh(select=selected if selected is not None
+                         else (self.items[0] if self.items else None))
+        finally:
+            self._restoring = False
+
+    def _signature(self):
+        try:
+            return json.dumps(self.collect(), sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            return repr(self.collect())
 
     # -- buttons ------------------------------------------------------------
     def new(self):
         self.apply_current()
+        self.record("new")
         data = self.default_entry()
         ids = {self.item_id(i) for i in self.items}
         base = data["id"]
         n = 2
         while data["id"] in ids:
-            data["id"] = f"{base}_{n}"
+            data["id"] = "{}_{}".format(base, n)
             n += 1
         self.items.append(data)
         self.refresh(select=data)
@@ -139,13 +304,14 @@ class FormTab:
         if self.current is None:
             return
         self.apply_current()
-        data = dict(self.current)
+        self.record("duplicate")
+        data = deepcopy(self.current)
         ids = {self.item_id(i) for i in self.items}
         base = str(data["id"]) + "_copy"
         new_id = base
         n = 2
         while new_id in ids:
-            new_id = f"{base}_{n}"
+            new_id = "{}_{}".format(base, n)
             n += 1
         data["id"] = new_id
         data["name"] = str(data.get("name", new_id)) + " copy"
@@ -157,6 +323,7 @@ class FormTab:
         if self.current is None:
             return
         item = self.current
+        self.record("delete")
         self.items.remove(item)
         self.current = None
         self.refresh()
@@ -172,6 +339,7 @@ class FormTab:
         self.app.content.delete_orphans(self.folder, {self.item_id(i) for i in self.items})
         self.app.content.reload()
         art.clear_caches()
+        self.mark_saved()
         self.app.set_status("{}: saved {} entries".format(self.title, len(self.items)))
 
     def validate(self):
@@ -182,9 +350,8 @@ class FormTab:
         return True
 
     # -- events / draw ------------------------------------------------------
-    def handle_event(self, event):
-        if self.list.handle_event(event):
-            return True
+    def _handle_widgets(self, event):
+        """Buttons and fields; subclasses add their own widgets around this."""
         for b in self.buttons:
             if b.handle_event(event):
                 return True
@@ -193,16 +360,33 @@ class FormTab:
                 return True
         return False
 
+    def handle_event(self, event):
+        if self.list.handle_event(event):        # selection is never undoable
+            return True
+        self._recorded = False
+        before = self._signature()
+        if not self._handle_widgets(event):
+            return False
+        if not self._recorded and not self._restoring \
+                and before != self._signature():
+            self.record("edit")
+            self.app.set_status("{}: change recorded ({})".format(
+                self.title, self.history.status()), W.DIM)
+        # keep items in lock-step with the widgets, so the dirty flag, the undo
+        # snapshots and save() all read the same, up-to-date, document
+        if not self._restoring:
+            self.apply_current()
+        return True
+
     def draw(self):
         self.ctx.canvas.fill((0, 0, 0))
-        _text(self.ctx, self.title, (FORM_X, FORM_TOP - 30), W.TEXT, "big")
-        _text(self.ctx, "{} entries".format(len(self.items)),
-              (FORM_X + 200, FORM_TOP - 24), W.DIM)
+        self._draw_title()
         self.list.draw(self.ctx.canvas)
         for b in self.buttons:
             b.draw(self.ctx.canvas)
         for field in self.fields.values():
             field.draw(self.ctx.canvas)
+        self._draw_history_status(L.LIST_X, L.LIST_HINT_Y, L.LIST_W)
 
 
 # ===========================================================================
@@ -216,6 +400,7 @@ class TerrainTab(FormTab):
     title = "Terrain"
     folder = "terrain"
     save_fn = "save_terrain_entry"
+    cols = 2
 
     def load_items(self):
         return [t.to_dict() for t in self.app.content.terrains]
@@ -272,7 +457,7 @@ class TerrainTab(FormTab):
                  "ov_frames", "ov_fps", "ov_loop", "buildable", "walkable",
                  "tint_enabled", "tint", "description"]
         for idx, name in enumerate(order):
-            self.place(name, idx % 2, idx // 2)
+            self.place(name, idx % self.cols, idx // self.cols)
 
     @staticmethod
     def _sprite_spec(kind, tile, path, fw, fh, frames, fps, loop):
@@ -382,15 +567,18 @@ class TerrainTab(FormTab):
         self.app.content.save_terrain(self.items)
         self.app.content.reload()
         art.clear_caches()
+        self.mark_saved()
         self.app.set_status("Terrain: saved {} entries".format(len(self.items)))
 
+    # -- previews -----------------------------------------------------------
     def _base_preview_rect(self):
-        return pygame.Rect(FORM_X, FORM_TOP + 12 * ROW_H + 10, 130, 130)
+        return pygame.Rect(L.FORM_X, self.below_form(), 130, 130)
 
     def _overlay_preview_rect(self):
-        return pygame.Rect(FORM_X, FORM_TOP + 12 * ROW_H + 156, 130, 96)
+        base = self._base_preview_rect()
+        return pygame.Rect(base.x, base.bottom + 10, 130, 96)
 
-    def handle_event(self, event):
+    def _handle_widgets(self, event):
         if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                 and self.current is not None):
             if self._base_preview_rect().collidepoint(event.pos):
@@ -399,7 +587,7 @@ class TerrainTab(FormTab):
             if self._overlay_preview_rect().collidepoint(event.pos):
                 self._open_flow("overlay")
                 return True
-        return super().handle_event(event)
+        return super()._handle_widgets(event)
 
     def _open_flow(self, which):
         if which == "base":
@@ -528,9 +716,20 @@ class UnitsTab(FormTab):
     title = "Units"
     folder = "units"
     save_fn = "save_unit"
+    cols = 3
 
     def load_items(self):
-        return [u.to_dict() for u in self.app.content.units.values()]
+        # UnitType.to_dict() drops the two newest keys, so read them back off
+        # the UnitType itself - otherwise projectiles / upgrade_paths would
+        # silently reset to the defaults every time the designer opens.
+        out = []
+        for unit in self.app.content.units.values():
+            data = unit.to_dict()
+            data["projectiles"] = unit.projectiles
+            data["upgrade_paths"] = [dict(p, gains=dict(p["gains"]))
+                                     for p in unit.upgrade_paths]
+            out.append(data)
+        return out
 
     def entry_label(self, item):
         return "[{}] {}".format(item.get("side", "?")[:3], item.get("name", item.get("id")))
@@ -545,7 +744,7 @@ class UnitsTab(FormTab):
                 "sound": "gun", "targets": "both", "targeting": "",
                 "is_flying": False, "damage_to_base": 1, "stop_to_attack": True,
                 "aggro": 160.0, "radius": 16.0, "can_be_attacked": True,
-                "description": ""}
+                "description": "", "projectiles": 1, "upgrade_paths": []}
 
     def build_fields(self):
         f = self.fields
@@ -577,6 +776,7 @@ class UnitsTab(FormTab):
         f["range"] = W.FloatField(self.ctx, (0, 0, 0, 0), "range")
         f["damage"] = W.FloatField(self.ctx, (0, 0, 0, 0), "damage")
         f["cooldown"] = W.FloatField(self.ctx, (0, 0, 0, 0), "cooldown (s)")
+        f["projectiles"] = W.IntField(self.ctx, (0, 0, 0, 0), "shots / attack", 1)
         f["projectile"] = W.ChoiceField(self.ctx, (0, 0, 0, 0), "projectile", PROJECTILES)
         f["splash"] = W.FloatField(self.ctx, (0, 0, 0, 0), "splash radius")
         f["sound"] = W.ChoiceField(self.ctx, (0, 0, 0, 0), "sound", SOUNDS)
@@ -595,13 +795,15 @@ class UnitsTab(FormTab):
                  "sprite_color", "frame_w", "frame_h", "sprite_frames",
                  "sprite_fps", "sprite_loop", "sprite_scale", "tint_enabled",
                  "tint", "hp", "cost", "bounty", "speed", "movement", "attack",
-                 "range", "damage", "cooldown", "projectile", "splash", "sound",
-                 "targets", "targeting", "is_flying", "damage_to_base",
-                 "stop_to_attack", "aggro", "radius", "can_be_attacked",
-                 "description"]
+                 "range", "damage", "cooldown", "projectiles", "projectile",
+                 "splash", "sound", "targets", "targeting", "is_flying",
+                 "damage_to_base", "stop_to_attack", "aggro", "radius",
+                 "can_be_attacked", "description"]
         for idx, name in enumerate(order):
-            self.place(name, idx % 2, idx // 2)
+            self.place(name, idx % self.cols, idx // self.cols)
+        self.upgrade_editor = W.UpgradePathEditor(self.ctx, L.UNITS_UPGRADE_RECT)
 
+    # -- sprite spec --------------------------------------------------------
     def _spec_from_fields(self):
         """Build a sprite spec from the current form values (for live preview)."""
         f = self.fields
@@ -639,6 +841,7 @@ class UnitsTab(FormTab):
                      "targeting", "is_flying", "damage_to_base", "stop_to_attack",
                      "aggro", "radius", "can_be_attacked", "description"):
             self.fields[name].set_value(item.get(name))
+        self.fields["projectiles"].set_value(max(1, int(item.get("projectiles") or 1)))
         spec = item.get("sprite") or {"kind": "pack", "tile": 226}
         self._loaded_spec = spec
         kind = spec.get("kind", "pack")
@@ -657,6 +860,7 @@ class UnitsTab(FormTab):
         self.fields["sprite_loop"].set_value(spec.get("loop", True))
         self.fields["tint_enabled"].set_value(item.get("tint") is not None)
         self.fields["tint"].set_value(item.get("tint") or [255, 255, 255])
+        self.upgrade_editor.set_paths(item.get("upgrade_paths"))
 
     def collect(self):
         data = {name: field.value for name, field in self.fields.items()}
@@ -666,18 +870,19 @@ class UnitsTab(FormTab):
             data.pop(helper, None)
         data["sprite"] = self._spec_from_fields()
         data["tint"] = data.pop("tint") if data.pop("tint_enabled") else None
+        data["projectiles"] = max(1, int(data.get("projectiles") or 1))
+        data["upgrade_paths"] = self.upgrade_editor.value
         return data
 
-    def _preview_rect(self):
-        return pygame.Rect(FORM_X, FORM_TOP + 19 * ROW_H + 6, 130, 130)
-
-    def handle_event(self, event):
+    def _handle_widgets(self, event):
         if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                 and self.current is not None
                 and self._preview_rect().collidepoint(event.pos)):
             self._open_sprite_flow()
             return True
-        return super().handle_event(event)
+        if self.upgrade_editor.handle_event(event):
+            return True
+        return super()._handle_widgets(event)
 
     def _open_sprite_flow(self):
         W.open_unit_sprite_flow(self.ctx, self._spec_from_fields(),
@@ -701,9 +906,12 @@ class UnitsTab(FormTab):
         if self.current is not None:
             self.current["sprite"] = spec
 
+    def _preview_rect(self):
+        return L.UNITS_PREVIEW_RECT
+
     def draw(self):
         super().draw()
-        # live sprite preview, top-right of the form (click it to set the art)
+        self.upgrade_editor.draw(self.ctx.canvas)
         if self.current is None:
             return
         spec = self._spec_from_fields()
@@ -714,23 +922,21 @@ class UnitsTab(FormTab):
         pygame.draw.rect(self.ctx.canvas, W.ACCENT, preview, 2, border_radius=6)
         try:
             t = pygame.time.get_ticks() / 1000.0
-            img = art.sprite(spec, 110, tint, frame=art.frame_index(spec, t))
+            img = art.sprite(spec, min(preview.height, preview.width) - 12, tint,
+                             frame=art.frame_index(spec, t))
             self.ctx.canvas.blit(img, img.get_rect(center=preview.center))
         except Exception:      # noqa: BLE001
             pass
-        hint_x = preview.right + 14
-        _text(self.ctx, "Sprite (click to change)", (hint_x, preview.y + 8), W.TEXT)
-        _text(self.ctx, "click the icon: static image or animation",
-              (hint_x, preview.y + 30), W.ACCENT)
+        _text(self.ctx, "Sprite - click to change",
+              (preview.x, L.UNITS_PREVIEW_HINT_Y), W.ACCENT)
         states = art.animation_names(spec)
         if states:
-            _text(self.ctx, "animation states: " + ", ".join(states),
-                  (hint_x, preview.y + 54), W.OK)
+            summary = "states: " + ", ".join(states)[:30]
         else:
             n = art.frame_count(spec)
-            extra = "{} frames @ {:g} fps".format(n, art.fps(spec)) if n > 1 else \
-                "static {}".format(spec.get("kind", "pack"))
-            _text(self.ctx, extra, (hint_x, preview.y + 54), W.DIM)
+            summary = "{} frames @ {:g} fps".format(n, art.fps(spec)) if n > 1 \
+                else "static {}".format(spec.get("kind", "pack"))
+        _text(self.ctx, summary[:34], (preview.x, L.UNITS_PREVIEW_HINT_Y + 18), W.DIM)
 
 
 # ===========================================================================
@@ -740,6 +946,7 @@ class RacesTab(FormTab):
     title = "Races"
     folder = "races"
     save_fn = "save_race"
+    cols = 2
 
     def load_items(self):
         return [dict(r) for r in self.app.content.races.values()]
@@ -750,13 +957,15 @@ class RacesTab(FormTab):
     def default_entry(self):
         return {"id": "new_race", "name": "New Race", "description": "",
                 "color": [120, 200, 140], "tint": None, "order": 99,
-                "units": [], "enemies": [], "levels": []}
+                "units": [], "enemies": [], "levels": [], "hero": None}
 
     def build_fields(self):
         f = self.fields
         f["id"] = W.TextField(self.ctx, (0, 0, 0, 0), "id")
         f["name"] = W.TextField(self.ctx, (0, 0, 0, 0), "name")
         f["order"] = W.IntField(self.ctx, (0, 0, 0, 0), "menu order")
+        f["hero"] = W.ChoiceField(self.ctx, (0, 0, 0, 0), "base hero",
+                                  (HERO_NONE,))
         f["color_enabled"] = W.CheckField(self.ctx, (0, 0, 0, 0), "theme colour")
         f["color"] = W.ColorField(self.ctx, (0, 0, 0, 0), "colour RGB")
         f["tint_enabled"] = W.CheckField(self.ctx, (0, 0, 0, 0), "unit tint")
@@ -765,17 +974,28 @@ class RacesTab(FormTab):
         self.place("id", 0, 0)
         self.place("name", 1, 0)
         self.place("order", 0, 1)
-        self.place("description", 1, 1, label_w=110)
+        self.place("hero", 1, 1, label_w=110)
         self.place("color_enabled", 0, 2)
         self.place("color", 1, 2)
         self.place("tint_enabled", 0, 3)
         self.place("tint", 1, 3)
+        self.place("description", 0, 4, span=2, label_w=110)
 
+        sel_top = self.below_form() + 28
         self.units_sel = W.MultiSelect(
-            self.ctx, (FORM_X, FORM_TOP + 4 * ROW_H + 30, self._col_w, 220))
+            self.ctx, (self.col_x[0], sel_top, self.col_w,
+                       L.BOTTOM - sel_top))
         self.enemies_sel = W.MultiSelect(
-            self.ctx, (FORM_X + self._col_w + COL_GAP, FORM_TOP + 4 * ROW_H + 30,
-                       self._col_w, 220))
+            self.ctx, (self.col_x[1], sel_top, self.col_w,
+                       L.BOTTOM - sel_top))
+        self.units_label_y = sel_top - 20
+        self.race_note_y = L.BOTTOM - 60
+
+    def _hero_options(self, hero=None):
+        options = [HERO_NONE] + [u.id for u in self.app.content.sorted_units("defender")]
+        if hero and hero not in options:
+            options.append(hero)          # keep an unknown id visible instead of dropping it
+        return options
 
     def load_entry(self, item):
         super().load_entry(item)
@@ -783,6 +1003,8 @@ class RacesTab(FormTab):
         self.fields["color"].set_value(item.get("color") or [120, 200, 140])
         self.fields["tint_enabled"].set_value(item.get("tint") is not None)
         self.fields["tint"].set_value(item.get("tint") or [200, 240, 200])
+        self.fields["hero"].options = self._hero_options(item.get("hero"))
+        self.fields["hero"].set_value(item.get("hero") or HERO_NONE)
         defenders = [(u.id, u.name) for u in self.app.content.sorted_units("defender")]
         attackers = [(u.id, u.name) for u in self.app.content.sorted_units("attacker")]
         self.units_sel.set_options(defenders, item.get("units") or [])
@@ -792,64 +1014,172 @@ class RacesTab(FormTab):
         data = {name: field.value for name, field in self.fields.items()}
         data["color"] = data.pop("color") if data.pop("color_enabled") else [120, 200, 140]
         data["tint"] = data.pop("tint") if data.pop("tint_enabled") else None
+        hero = data.pop("hero")
+        data["hero"] = None if hero in (None, HERO_NONE) else hero
         data["units"] = self.units_sel.value
         data["enemies"] = self.enemies_sel.value
         return data
 
-    def handle_event(self, event):
+    def _handle_widgets(self, event):
         if self.units_sel.handle_event(event) or self.enemies_sel.handle_event(event):
             return True
-        return super().handle_event(event)
+        return super()._handle_widgets(event)
 
     def draw(self):
         super().draw()
         _text(self.ctx, "Available units (defenders)",
-              (FORM_X, FORM_TOP + 4 * ROW_H + 10))
-        _text(self.ctx, "Enemies",
-              (FORM_X + self._col_w + COL_GAP, FORM_TOP + 4 * ROW_H + 10))
+              (self.units_sel.rect.x, self.units_label_y))
+        _text(self.ctx, "Enemies", (self.enemies_sel.rect.x, self.units_label_y))
+        _text(self.ctx, "base hero is summoned when an attacker reaches the base",
+              (self.units_sel.rect.x, self.units_label_y - 20), W.DIM)
         self.units_sel.draw(self.ctx.canvas)
         self.enemies_sel.draw(self.ctx.canvas)
         # levels belonging to this race (managed from the Levels tab)
         if self.current is not None:
-            y = FORM_TOP + 4 * ROW_H + 260
             levels = [l["id"] for l in self.app.content.levels.values()
                       if l.get("race") == self.current.get("id")]
             _text(self.ctx, "Levels for this race: {} (edit on the Levels tab)"
-                  .format(", ".join(sorted(levels)) or "none"), (FORM_X, y), W.DIM)
+                  .format(", ".join(sorted(levels)) or "none"),
+                  (self.col_x[0], self.race_note_y), W.DIM)
 
 
 # ===========================================================================
-# levels
+# map canvas: a zoomable, pannable viewport onto the level grid
 # ===========================================================================
-CELL = 28
-MAX_CELL = 28              # never draw the map larger than this
-MIN_CELL = 4               # below this the map is too small to read
-MAP_RECT = pygame.Rect(264, 64, 20 * CELL, 10 * CELL)
-PALETTE_Y = MAP_RECT.bottom + 10
-AVAIL_RECT = pygame.Rect(264, PALETTE_Y + 92, 272, 200)
-ENEMY_RECT = pygame.Rect(264 + 288, PALETTE_Y + 92, 272, 200)
-LEVEL_FORM_X = 848
-LEVEL_COL = (1280 - LEVEL_FORM_X - 16 - 12) // 2
+CELL = 28              # starting zoom, in canvas pixels per grid cell
+MAX_CELL = 48           # zoom in limit
+MIN_CELL = 6            # zoom out limit
 
 
 class MapCanvas:
+    """A viewport onto a level grid that may be much larger than the panel.
+
+    The panel is fixed; the *cell size* is what changes.  ``cell`` is the zoom
+    level in canvas pixels and ``scroll_x`` / ``scroll_y`` are the pan offset,
+    so grid cell ``(x, y)`` always lands at::
+
+        panel.x + x * cell - scroll_x,  panel.y + y * cell - scroll_y
+
+    Painting and the path preview both go through that one mapping, which is
+    what keeps clicks correct at any zoom.  Zoom and pan never touch ``grid``,
+    so they can never corrupt a level and never need an undo entry.
+    """
+
+    ZOOM_STEP = 1.25
+    DRAG_THRESHOLD = 4      # px of movement before a right-drag becomes a pan
+
     def __init__(self, ctx, app, rect):
         self.ctx = ctx
         self.app = app
         self.rect = pygame.Rect(rect)
         self.cell = CELL
-        self.width = rect.width // CELL
-        self.height = rect.height // CELL
+        self.width = max(1, rect.width // CELL)
+        self.height = max(1, rect.height // CELL)
         self.grid = [["g"] * self.width for _ in range(self.height)]
         self.selected = "g"
         self.painting = False
         self._tile_cache = {}
+        self._marker_cache = {}
         self.path = []
         self.path_ok = False
-        self.fits = True
         self._dirty = True
+        self.scroll_x = 0.0
+        self.scroll_y = 0.0
+        self.space_down = False
+        self._pan = None            # (origin_pos, scroll_x, scroll_y)
+        self._press = None          # (pos, button) for a pending click
+        self.on_stroke_begin = None     # tab hooks, called before the first edit
+        self.on_stroke_end = None
         self._fit_cell()
 
+    # -- geometry -----------------------------------------------------------
+    def set_rect(self, rect):
+        """Resize the panel (the zoom and pan are kept, then re-clamped)."""
+        self.rect = pygame.Rect(rect)
+        self._clamp_scroll()
+
+    @property
+    def fits(self):
+        """True when the whole grid fits in the panel at the current zoom."""
+        return (self.width * self.cell <= self.rect.width
+                and self.height * self.cell <= self.rect.height)
+
+    @property
+    def map_rect(self):
+        """Where the whole grid sits in canvas coordinates (may overhang)."""
+        return pygame.Rect(int(self.rect.x - self.scroll_x),
+                           int(self.rect.y - self.scroll_y),
+                           self.width * self.cell, self.height * self.cell)
+
+    def set_cell(self, cell):
+        cell = max(MIN_CELL, min(MAX_CELL, int(round(cell))))
+        if cell != self.cell:
+            self.cell = cell
+            self._tile_cache.clear()      # tiles are rasterised at cell size
+            self._marker_cache.clear()
+        return self.cell
+
+    def _fit_cell(self):
+        """Scale the tile size so the whole grid lands inside the view rect."""
+        cell = min(self.rect.width // max(1, self.width),
+                   self.rect.height // max(1, self.height))
+        self.set_cell(cell)
+        self.scroll_x = 0.0
+        self.scroll_y = 0.0
+        self._clamp_scroll()
+
+    def fit_view(self):
+        """Zoom + pan so the whole map is visible again."""
+        self._fit_cell()
+
+    def _clamp_scroll(self):
+        """Keep the grid inside the panel, centring it when it is smaller."""
+        max_x = self.width * self.cell - self.rect.width
+        max_y = self.height * self.cell - self.rect.height
+        self.scroll_x = min(max(self.scroll_x, min(0.0, max_x)), max(0.0, max_x))
+        self.scroll_y = min(max(self.scroll_y, min(0.0, max_y)), max(0.0, max_y))
+
+    def zoom_at(self, pos, notches):
+        """Zoom by ``notches`` steps, keeping the point under ``pos`` fixed."""
+        if not notches:
+            return
+        anchor_x = pos[0] - self.rect.x + self.scroll_x
+        anchor_y = pos[1] - self.rect.y + self.scroll_y
+        cell_x = anchor_x / self.cell
+        cell_y = anchor_y / self.cell
+        target = self.cell * (self.ZOOM_STEP ** notches)
+        new_cell = max(MIN_CELL, min(MAX_CELL, int(round(target))))
+        if new_cell == self.cell:
+            return
+        self.set_cell(new_cell)
+        self.scroll_x = cell_x * self.cell - (pos[0] - self.rect.x)
+        self.scroll_y = cell_y * self.cell - (pos[1] - self.rect.y)
+        self._clamp_scroll()
+
+    def cell_screen_rect(self, x, y):
+        return pygame.Rect(self.rect.x + x * self.cell - self.scroll_x,
+                           self.rect.y + y * self.cell - self.scroll_y,
+                           self.cell, self.cell)
+
+    def cell_center(self, x, y):
+        r = self.cell_screen_rect(x, y)
+        return (r.centerx, r.centery)
+
+    def _cell_at(self, pos):
+        if not self.rect.collidepoint(pos):
+            return None
+        return (int((pos[0] - self.rect.x + self.scroll_x) // self.cell),
+                int((pos[1] - self.rect.y + self.scroll_y) // self.cell))
+
+    def visible_range(self):
+        """Inclusive ``(x0, y0, x1, y1)`` cell range covering the panel."""
+        x0 = max(0, int(self.scroll_x) // self.cell)
+        y0 = max(0, int(self.scroll_y) // self.cell)
+        x1 = min(self.width - 1, int((self.scroll_x + self.rect.width) - 1) // self.cell)
+        y1 = min(self.height - 1, int((self.scroll_y + self.rect.height) - 1) // self.cell)
+        return x0, y0, x1, y1
+
+    # -- content ------------------------------------------------------------
     def set_grid(self, rows):
         rows = list(rows or [])
         if rows:                       # adopt the level's real dimensions
@@ -865,21 +1195,6 @@ class MapCanvas:
     def rows(self):
         return ["".join(r) for r in self.grid]
 
-    def _fit_cell(self):
-        """Scale the tile size so the whole grid stays inside the view rect.
-
-        Levels can be far larger than the designer's fixed map panel, so the
-        cells shrink instead of the panel growing over the unit lists.
-        """
-        cell = min(self.rect.width // max(1, self.width),
-                   self.rect.height // max(1, self.height))
-        cell = max(MIN_CELL, min(MAX_CELL, cell))
-        if cell != self.cell:
-            self.cell = cell
-            self._tile_cache = {}       # tiles are rasterised at cell size
-        self.fits = (self.width * self.cell <= self.rect.width
-                     and self.height * self.cell <= self.rect.height)
-
     def resize(self, width, height):
         width, height = max(1, int(width)), max(1, int(height))
         new = [["g"] * width for _ in range(height)]
@@ -891,38 +1206,22 @@ class MapCanvas:
         self._fit_cell()
         self._dirty = True
 
-    def _cell_at(self, pos):
-        if not self.rect.collidepoint(pos):
-            return None
-        return ((pos[0] - self.rect.x) // self.cell,
-                (pos[1] - self.rect.y) // self.cell)
-
     def paint(self, cell, char):
         if cell is None:
-            return
+            return False
         x, y = cell
         if not (0 <= x < self.width and 0 <= y < self.height):
-            return
+            return False
         if char in ("S", "B"):
             for j in range(self.height):
                 for i in range(self.width):
                     if self.grid[j][i] == char:
                         self.grid[j][i] = "g"
+        if self.grid[y][x] == char:
+            return False
         self.grid[y][x] = char
         self._dirty = True
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
-            self.painting = True
-            self.paint(self._cell_at(event.pos),
-                       "g" if event.button == 3 else self.selected)
-            return True
-        if event.type == pygame.MOUSEBUTTONUP:
-            self.painting = False
-        if event.type == pygame.MOUSEMOTION and self.painting:
-            self.paint(self._cell_at(event.pos), self.selected)
-            return True
-        return False
+        return True
 
     def terrain_at(self, ch):
         return self.app.terrain_lookup().get(ch)
@@ -974,8 +1273,106 @@ class MapCanvas:
 
     def invalidate(self):
         self._tile_cache.clear()
+        self._marker_cache.clear()
         self._dirty = True
 
+    # -- events -------------------------------------------------------------
+    def _begin_stroke(self):
+        if self.on_stroke_begin is not None:
+            self.on_stroke_begin()
+
+    def _end_stroke(self, changed):
+        if self.on_stroke_end is not None:
+            self.on_stroke_end(changed)
+
+    def _pan_from(self, origin, start_scroll):
+        self._pan = (origin, start_scroll[0], start_scroll[1])
+
+    def _end_drag(self):
+        """Drop any half-finished drag so a stray button never wedges it."""
+        was_painting = self.painting
+        self.painting = False
+        self._pan = None
+        self._press = None
+        if was_painting:
+            self._end_stroke(False)
+
+    def _panning_possible(self):
+        return bool(pygame.key.get_pressed()[pygame.K_SPACE]) or self.space_down
+
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            self.space_down = True
+        elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
+            self.space_down = False
+
+        if event.type == pygame.MOUSEWHEEL and self.rect.collidepoint(event.pos):
+            # pygame reports wheel-up as y > 0, which is the "zoom in" notch
+            self.zoom_at(event.pos, event.y)
+            return True
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            return self._button_down(event)
+        if event.type == pygame.MOUSEMOTION:
+            return self._motion(event)
+        if event.type == pygame.MOUSEBUTTONUP:
+            return self._button_up(event)
+        return False
+
+    def _button_down(self, event):
+        if not self.rect.collidepoint(event.pos):
+            return False
+        self._end_drag()
+        if event.button == 2 or (event.button == 1 and self._panning_possible()):
+            self._pan_from(event.pos, (self.scroll_x, self.scroll_y))
+            return True
+        if event.button in (1, 3):
+            self._press = (event.pos, event.button)
+            if event.button == 1:
+                self.painting = True
+                self._begin_stroke()
+                self._end_stroke(self.paint(self._cell_at(event.pos), self.selected))
+            return True
+        return False
+
+    def _motion(self, event):
+        if self._pan is not None:
+            origin, sx, sy = self._pan
+            self.scroll_x = sx - (event.pos[0] - origin[0])
+            self.scroll_y = sy - (event.pos[1] - origin[1])
+            self._clamp_scroll()
+            return True
+        if self.painting:
+            self._end_stroke(self.paint(self._cell_at(event.pos), self.selected))
+            return True
+        if self._press is not None and self._press[1] == 3:
+            moved = max(abs(event.pos[0] - self._press[0][0]),
+                        abs(event.pos[1] - self._press[0][1]))
+            if moved > self.DRAG_THRESHOLD:
+                # a right-*drag* pans; a right-*click* still erases to grass
+                self._pan_from(self._press[0], (self.scroll_x, self.scroll_y))
+                return True
+        return False
+
+    def _button_up(self, event):
+        pan, press, painting = self._pan, self._press, self.painting
+        self._pan = None
+        self._press = None
+        self.painting = False
+        if pan is not None:
+            return True
+        if painting:
+            self._end_stroke(False)
+            return True
+        if press is not None:
+            pos, button = press
+            if button == 3 and pos == event.pos:      # a plain click: erase
+                self._begin_stroke()
+                self._end_stroke(self.paint(self._cell_at(pos), "g"))
+            return True
+        return False
+
+    # -- drawing ------------------------------------------------------------
     def _tile(self, ch):
         if ch in self._tile_cache:
             return self._tile_cache[ch]
@@ -985,38 +1382,82 @@ class MapCanvas:
         self._tile_cache[ch] = art.sprite(spec, self.cell, terr.get("tint"))
         return self._tile_cache[ch]
 
+    def _marker(self, ch):
+        if ch not in self._marker_cache:
+            self._marker_cache[ch] = art.scaled(
+                art.tile(133 if ch == "S" else 180), (self.cell, self.cell))
+        return self._marker_cache[ch]
+
     def draw(self):
         if self._dirty:
             self.recompute_path()
         canvas = self.ctx.canvas
         pygame.draw.rect(canvas, (10, 10, 14), self.rect)
-        for y in range(self.height):
-            for x in range(self.width):
+        canvas.set_clip(self.rect)
+        x0, y0, x1, y1 = self.visible_range()
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
                 ch = self.grid[y][x]
-                px = self.rect.x + x * self.cell
-                py = self.rect.y + y * self.cell
+                pos = (int(self.rect.x + x * self.cell - self.scroll_x),
+                       int(self.rect.y + y * self.cell - self.scroll_y))
                 if ch in ("S", "B"):
-                    canvas.blit(self._tile("g"), (px, py))
-                    pad = art.scaled(art.tile(133 if ch == "S" else 180),
-                                     (self.cell, self.cell))
-                    canvas.blit(pad, (px, py))
+                    canvas.blit(self._tile("g"), pos)
+                    canvas.blit(self._marker(ch), pos)
                 else:
-                    canvas.blit(self._tile(ch), (px, py))
+                    canvas.blit(self._tile(ch), pos)
         # path preview
         if len(self.path) > 1:
-            pts = [(self.rect.x + (x + 0.5) * self.cell,
-                    self.rect.y + (y + 0.5) * self.cell) for x, y in self.path]
+            pts = [self.cell_center(x, y) for x, y in self.path]
             pygame.draw.lines(canvas, (255, 240, 120), False, pts, 2)
-        else:
+        if self.cell >= 10:                     # grid lines are noise when tiny
+            for x in range(x0, x1 + 2):
+                gx = int(self.rect.x + x * self.cell - self.scroll_x)
+                pygame.draw.line(canvas, (255, 255, 255, 30), (gx, self.rect.y),
+                                 (gx, self.rect.bottom), 1)
+            for y in range(y0, y1 + 2):
+                gy = int(self.rect.y + y * self.cell - self.scroll_y)
+                pygame.draw.line(canvas, (255, 255, 255, 30), (self.rect.x, gy),
+                                 (self.rect.right, gy), 1)
+        pygame.draw.rect(canvas, (70, 70, 100), self.map_rect, 1)
+        if not self.path_ok:
             pygame.draw.rect(canvas, (200, 60, 60), self.rect, 2)
-        for x in range(self.width + 1):
-            pygame.draw.line(canvas, (255, 255, 255, 30),
-                             (self.rect.x + x * self.cell, self.rect.y),
-                             (self.rect.x + x * self.cell, self.rect.bottom), 1)
+        canvas.set_clip(None)
+        pygame.draw.rect(canvas, W.EDGE, self.rect, 1)
+        if not self.fits:
+            self._draw_minimap(canvas)
+
+    def _draw_minimap(self, canvas):
+        """A corner outline of where the panel sits inside the whole map."""
+        box = pygame.Rect(self.rect.right - 96, self.rect.bottom - 66, 88, 56)
+        pygame.draw.rect(canvas, (10, 10, 14), box, border_radius=4)
+        pygame.draw.rect(canvas, W.EDGE, box, 1, border_radius=4)
+        span_x = max(1, self.width * self.cell)
+        span_y = max(1, self.height * self.cell)
+        inner = pygame.Rect(box.x + 2, box.y + 2, box.width - 4, box.height - 4)
+        scale = min(inner.width / span_x, inner.height / span_y)
+        origin = (inner.centerx - span_x * scale / 2, inner.centery - span_y * scale / 2)
+        size = (max(2, int(span_x * scale)), max(2, int(span_y * scale)))
+        pygame.draw.rect(canvas, (80, 110, 90), pygame.Rect(origin, size), 1)
+        view_w = max(3, int(self.rect.width * scale))
+        view_h = max(3, int(self.rect.height * scale))
+        vx = origin[0] + (self.scroll_x * scale)
+        vy = origin[1] + (self.scroll_y * scale)
+        pygame.draw.rect(canvas, W.ACCENT, pygame.Rect(int(vx), int(vy),
+                                                       view_w, view_h), 1)
 
 
-class LevelsTab:
-    """Full level editor: paint the map, pick units, build waves."""
+# ===========================================================================
+# levels
+# ===========================================================================
+class LevelsTab(UndoMixin):
+    """Full level editor: paint the map, pick units, build waves.
+
+    Three columns: the level list on the left, the zoomable map canvas in the
+    middle, the level form + wave builder on the right (from
+    ``layout.LEVEL_FORM_X``).  Every rect below is derived from live values --
+    the map panel shrinks if the terrain palette needs more than one row of
+    swatches -- so nothing can overlap or leave the canvas.
+    """
 
     title = "Levels"
     folder = "levels"
@@ -1027,68 +1468,138 @@ class LevelsTab:
         self.ctx = app.ctx
         self.items = [dict(l) for l in app.content.levels.values()]
         self.current = None
-        self.list = W.ScrollList(self.ctx, LIST, [], on_select=self._on_select)
-        bw = (LIST.width - 16) // 2
+        self.wave_index = 0
+        self.group_index = 0
+        self.palette_top = L.PAL_BOTTOM - L.PAL_SWATCH
+        self.list = W.ScrollList(self.ctx, L.LEVELS_LIST_RECT, [],
+                                 on_select=self._on_select)
+        self.undo_btn = self._button(2, 0, "Undo", self.undo)
+        self.redo_btn = self._button(2, 1, "Redo", self.redo)
         self.list_buttons = [
-            W.Btn(self.ctx, (LIST.x, LIST.bottom + 8, bw, 30), "New", self.new),
-            W.Btn(self.ctx, (LIST.x + bw + 8, LIST.bottom + 8, bw, 30), "Dup", self.duplicate),
-            W.Btn(self.ctx, (LIST.x, LIST.bottom + 44, bw, 30), "Delete", self.delete, color=(90, 54, 54)),
-            W.Btn(self.ctx, (LIST.x + bw + 8, LIST.bottom + 44, bw, 30), "Save", self.save, color=(64, 92, 70)),
+            self._button(0, 0, "New", self.new),
+            self._button(0, 1, "Dup", self.duplicate),
+            self._button(1, 0, "Delete", self.delete, color=(90, 54, 54)),
+            self._button(1, 1, "Save", self.save, color=(64, 92, 70)),
+            self.undo_btn, self.redo_btn,
         ]
-        self.map = MapCanvas(self.ctx, app, MAP_RECT)
         self.fields = {}
+        self.map = MapCanvas(self.ctx, app, pygame.Rect(L.MAP_X, L.MAP_TOP,
+                                                         L.MAP_W, L.MAP_MAX_H))
+        self.map.on_stroke_begin = self._stroke_begin
+        self.map.on_stroke_end = self._stroke_end
+        self._stroke_state = None
         self._build_fields()
-        self.avail_sel = W.MultiSelect(self.ctx, AVAIL_RECT)
-        self.enemy_sel = W.MultiSelect(self.ctx, ENEMY_RECT)
-        self.wave_list = W.ScrollList(self.ctx, (LEVEL_FORM_X, 258, 400, 132),
-                                      [], on_select=self._on_wave)
-        self.group_list = W.ScrollList(self.ctx, (LEVEL_FORM_X, 452, 400, 120),
-                                       [], on_select=self._on_group)
+        self.setup_history()
+        self.avail_sel = W.MultiSelect(
+            self.ctx, (L.MAP_X, L.SEL_TOP, L.SEL_W, L.SEL_H))
+        self.enemy_sel = W.MultiSelect(
+            self.ctx, (L.MAP_X + L.SEL_W + 12, L.SEL_TOP, L.SEL_W, L.SEL_H))
+        self.wave_list = W.ScrollList(self.ctx, L.WAVE_LIST_RECT, [],
+                                      on_select=self._on_wave)
+        self.group_list = W.ScrollList(self.ctx, L.GROUP_LIST_RECT, [],
+                                       on_select=self._on_group)
+        bw = (L.LEVEL_FORM_W - 3 * 8) // 4
         self.wave_buttons = [
-            W.Btn(self.ctx, (LEVEL_FORM_X, 396, 96, 26), "Add wave", self.add_wave),
-            W.Btn(self.ctx, (LEVEL_FORM_X + 104, 396, 96, 26), "Del wave", self.del_wave),
-            W.Btn(self.ctx, (LEVEL_FORM_X + 208, 396, 96, 26), "Dup wave", self.dup_wave),
-            W.Btn(self.ctx, (LEVEL_FORM_X + 312, 396, 88, 26), "Clear", self.clear_wave),
+            W.Btn(self.ctx, (L.LEVEL_FORM_X, L.WAVE_BTN_Y, bw, L.ZOOM_BTN_H),
+                  "Add wave", self.add_wave),
+            W.Btn(self.ctx, (L.LEVEL_FORM_X + bw + 8, L.WAVE_BTN_Y, bw,
+                             L.ZOOM_BTN_H), "Del wave", self.del_wave),
+            W.Btn(self.ctx, (L.LEVEL_FORM_X + 2 * (bw + 8), L.WAVE_BTN_Y, bw,
+                             L.ZOOM_BTN_H), "Dup wave", self.dup_wave),
+            W.Btn(self.ctx, (L.LEVEL_FORM_X + 3 * (bw + 8), L.WAVE_BTN_Y, bw,
+                             L.ZOOM_BTN_H), "Clear", self.clear_wave),
         ]
         self.group_buttons = [
-            W.Btn(self.ctx, (LEVEL_FORM_X, 578, 96, 26), "Add unit", self.add_group),
-            W.Btn(self.ctx, (LEVEL_FORM_X + 104, 578, 96, 26), "Del unit", self.del_group),
+            W.Btn(self.ctx, (L.LEVEL_FORM_X, L.GROUP_BTN_Y, bw, L.ZOOM_BTN_H),
+                  "Add unit", self.add_group),
+            W.Btn(self.ctx, (L.LEVEL_FORM_X + bw + 8, L.GROUP_BTN_Y, bw,
+                             L.ZOOM_BTN_H), "Del unit", self.del_group),
         ]
-        self.g_unit = W.ChoiceField(self.ctx, (LEVEL_FORM_X, 610, 190, 30), "unit", [], label_w=40)
-        self.g_count = W.IntField(self.ctx, (LEVEL_FORM_X + 200, 610, 100, 30), "count", 1, label_w=52)
-        self.g_interval = W.FloatField(self.ctx, (LEVEL_FORM_X + 305, 610, 95, 30), "gap", 1.0,
-                                       label_w=32)
+        self.g_unit = W.ChoiceField(self.ctx, (L.LEVEL_FORM_X, L.GROUP_FIELD_Y, 190,
+                                               L.GROUP_FIELD_H), "unit", [], label_w=40)
+        self.g_count = W.IntField(self.ctx, (L.LEVEL_FORM_X + 198, L.GROUP_FIELD_Y,
+                                             100, L.GROUP_FIELD_H), "count", 1, label_w=52)
+        self.g_interval = W.FloatField(self.ctx, (L.LEVEL_FORM_X + 306,
+                                                  L.GROUP_FIELD_Y, 110,
+                                                  L.GROUP_FIELD_H), "gap", 1.0,
+                                       label_w=34)
+        self._layout()
         self.refresh()
         self._refresh_waves()
 
-    # -- fields -------------------------------------------------------------
+    # -- layout -------------------------------------------------------------
+    def _button(self, row, col, text, fn, color=W.PANEL2):
+        rect = (L.LIST_X + col * (L.LEVEL_BTN_W + 8), L.BTN_ROWS[row],
+                L.LEVEL_BTN_W, L.BTN_H)
+        return W.Btn(self.ctx, rect, text, fn, color=color)
+
+    def _layout(self):
+        """Derive the map panel + palette band from the live terrain palette."""
+        count = len(self.app.terrain_tab.items) + 2          # + spawn + base
+        rows = max(1, (count + L.PAL_COLS - 1) // L.PAL_COLS)
+        self.palette_top = L.PAL_BOTTOM - (rows - 1) * L.PAL_ROW_H - L.PAL_SWATCH
+        height = max(180, self.palette_top - 10 - L.MAP_TOP)
+        self.map.set_rect(pygame.Rect(L.MAP_X, L.MAP_TOP, L.MAP_W, height))
+        self.zoom_y = L.ZOOM_Y
+        self.zoom_buttons = [
+            W.Btn(self.ctx, (L.MAP_X, self.zoom_y, L.ZOOM_BTN_W, L.ZOOM_BTN_H),
+                  "zoom -", lambda: self._zoom_button(-1)),
+            W.Btn(self.ctx, (L.MAP_X + L.ZOOM_BTN_W + L.ZOOM_BTN_GAP, self.zoom_y,
+                             L.ZOOM_BTN_W, L.ZOOM_BTN_H), "zoom +",
+                  lambda: self._zoom_button(1)),
+            # "fit" also puts the scroll back at the map origin
+            W.Btn(self.ctx, (L.MAP_X + 2 * (L.ZOOM_BTN_W + L.ZOOM_BTN_GAP),
+                             self.zoom_y, L.ZOOM_BTN_W, L.ZOOM_BTN_H),
+                  "fit map", self.map.fit_view),
+        ]
+        self.zoom_readout_x = L.MAP_X + 3 * (L.ZOOM_BTN_W + L.ZOOM_BTN_GAP)
+
+    def map_to_origin(self):
+        self.map.scroll_x = 0.0
+        self.map.scroll_y = 0.0
+        self.map._clamp_scroll()
+
+    def _zoom_button(self, notches):
+        centre = (self.map.rect.centerx, self.map.rect.centery)
+        self.map.zoom_at(centre, notches)
+
     def on_show(self):
         """Re-read terrain + unit/race lists when the tab becomes visible."""
         self.map.invalidate()
+        self._layout()
         self.fields["race"].options = [r["id"] for r in self.app.content.sorted_races()]
+        self.avail_sel.set_options(
+            [(u.id, u.name) for u in self.app.content.sorted_units("defender")])
+        self.enemy_sel.set_options(
+            [(u.id, u.name) for u in self.app.content.sorted_units("attacker")])
 
+    # -- fields -------------------------------------------------------------
     def _build_fields(self):
         f = self.fields
         f["id"] = W.TextField(self.ctx, (0, 0, 0, 0), "id", label_w=70)
         f["name"] = W.TextField(self.ctx, (0, 0, 0, 0), "name", label_w=70)
         f["race"] = W.ChoiceField(self.ctx, (0, 0, 0, 0), "race", [], label_w=70)
-        f["gold"] = W.IntField(self.ctx, (0, 0, 0, 0), "gold", label_w=70)
-        f["lives"] = W.IntField(self.ctx, (0, 0, 0, 0), "lives", label_w=70)
         f["order"] = W.IntField(self.ctx, (0, 0, 0, 0), "order", label_w=70)
-        f["terrain_tint_enabled"] = W.CheckField(self.ctx, (0, 0, 0, 0), "map tint", label_w=70)
-        f["terrain_tint"] = W.ColorField(self.ctx, (0, 0, 0, 0), "tint RGB", label_w=70)
+        f["gold"] = W.IntField(self.ctx, (0, 0, 0, 0), "gold", label_w=70)
+        f["gold_per_sec"] = W.FloatField(self.ctx, (0, 0, 0, 0), "gold / sec",
+                                          S.DEFAULT_GOLD_PER_SEC, label_w=70)
+        f["lives"] = W.IntField(self.ctx, (0, 0, 0, 0), "lives", label_w=70)
         f["width"] = W.IntField(self.ctx, (0, 0, 0, 0), "grid W", label_w=70)
+        f["terrain_tint_enabled"] = W.CheckField(self.ctx, (0, 0, 0, 0), "map tint",
+                                                 label_w=70)
+        f["terrain_tint"] = W.ColorField(self.ctx, (0, 0, 0, 0), "tint RGB", label_w=70)
         f["height"] = W.IntField(self.ctx, (0, 0, 0, 0), "grid H", label_w=70)
-        rows = [("id", 0, 0), ("name", 1, 0), ("race", 0, 1), ("order", 1, 1),
-                ("gold", 0, 2), ("lives", 1, 2), ("terrain_tint_enabled", 0, 3),
-                ("terrain_tint", 1, 3), ("width", 0, 4), ("height", 1, 4)]
-        for name, col, row in rows:
-            rect = pygame.Rect(LEVEL_FORM_X + col * (LEVEL_COL + 12),
-                               64 + row * ROW_H, LEVEL_COL, ROW_H - 4)
-            f[name].set_rect(rect)
-
-    def load_items(self):
-        return [dict(l) for l in self.app.content.levels.values()]
+        f["description"] = W.TextField(self.ctx, (0, 0, 0, 0), "description",
+                                       label_w=96)
+        rows = [("id", 0, 0, 1), ("name", 1, 0, 1),
+                ("race", 0, 1, 1), ("order", 1, 1, 1),
+                ("gold", 0, 2, 1), ("gold_per_sec", 1, 2, 1),
+                ("lives", 0, 3, 1), ("width", 1, 3, 1),
+                ("terrain_tint_enabled", 0, 4, 1), ("height", 1, 4, 1),
+                ("description", 0, 5, 2)]
+        for name, col, row, span in rows:
+            width = L.LEVEL_COL_W * span + L.COL_GAP * (span - 1)
+            f[name].set_rect(L.row_rect(row, L.LEVEL_COLS[col], width))
 
     def entry_label(self, item):
         return "{} [{}]".format(item.get("name", item.get("id")), item.get("race", "?"))
@@ -1099,12 +1610,13 @@ class LevelsTab:
         grid[5][19] = "B"
         race = self.app.content.sorted_races()
         return {"id": "new_level", "race": race[0]["id"] if race else "",
-                "name": "New Level", "description": "", "gold": 200, "lives": 20,
+                "name": "New Level", "description": "", "gold": 200,
+                "gold_per_sec": S.DEFAULT_GOLD_PER_SEC, "lives": 20,
                 "order": 99, "grid": ["".join(r) for r in grid],
                 "terrain_tint": None, "available_units": [], "enemy_pool": [],
                 "waves": []}
 
-    # -- helpers ------------------------------------------------------------
+    # -- list ops -----------------------------------------------------------
     def refresh(self, select=None):
         self.list.set_items([self.entry_label(i) for i in self.items], keep=False)
         if select is not None and select in self.items:
@@ -1127,17 +1639,18 @@ class LevelsTab:
         f["id"].set_value(item.get("id"))
         f["name"].set_value(item.get("name"))
         f["gold"].set_value(item.get("gold", 200))
+        f["gold_per_sec"].set_value(self._gold_per_sec(item))
         f["lives"].set_value(item.get("lives", 20))
         f["order"].set_value(item.get("order", 0))
+        f["description"].set_value(item.get("description", ""))
         f["terrain_tint_enabled"].set_value(item.get("terrain_tint") is not None)
         f["terrain_tint"].set_value(item.get("terrain_tint") or [255, 255, 255])
         f["race"].options = [r["id"] for r in self.app.content.sorted_races()]
         f["race"].set_value(item.get("race"))
-        self.map.resize(len(item.get("grid", ["g" * 20])[0]) if item.get("grid") else 20,
-                        len(item.get("grid")) if item.get("grid") else 10)
-        self.map.set_grid(item.get("grid") or [])
-        f["width"].set_value(self.map.width)
-        f["height"].set_value(self.map.height)
+        grid = item.get("grid") or []
+        self.map.resize(len(grid[0]) if grid else 20, len(grid) if grid else 10)
+        self.map.set_grid(grid)
+        self._sync_size_fields()
         self.avail_sel.set_options(
             [(u.id, u.name) for u in self.app.content.sorted_units("defender")],
             item.get("available_units") or [])
@@ -1148,24 +1661,92 @@ class LevelsTab:
         self.group_index = 0
         self._refresh_waves()
 
+    @staticmethod
+    def _gold_per_sec(item):
+        value = item.get("gold_per_sec")
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = S.DEFAULT_GOLD_PER_SEC
+        return round(min(max(0.0, value), S.GOLD_PER_SEC_MAX), 4)
+
+    def _sync_size_fields(self):
+        self.fields["width"].set_value(self.map.width)
+        self.fields["height"].set_value(self.map.height)
+
+    def collect(self):
+        """The level as the widgets currently describe it.
+
+        ``width`` / ``height`` are deliberately absent: they are derived from
+        the canvas, so editing them resizes the grid rather than the document
+        (and that resize is what gets an undo entry).
+        """
+        f = self.fields
+        return {
+            "id": f["id"].value,
+            "name": f["name"].value,
+            "description": f["description"].value,
+            "race": f["race"].value,
+            "order": f["order"].value,
+            "gold": f["gold"].value,
+            "gold_per_sec": self._gold_per_sec({"gold_per_sec": f["gold_per_sec"].value}),
+            "lives": f["lives"].value,
+            "terrain_tint": (f["terrain_tint"].value
+                             if f["terrain_tint_enabled"].value else None),
+            "available_units": self.avail_sel.value,
+            "enemy_pool": self.enemy_sel.value,
+            "waves": deepcopy(self._waves()),
+        }
+
+    def _signature(self):
+        try:
+            return json.dumps(self.collect(), sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            return repr(self.collect())
+
     def apply_current(self):
         if self.current is None or self.current not in self.items:
             return
         data = dict(self.current)
-        data["id"] = self.fields["id"].value
-        data["name"] = self.fields["name"].value
-        data["gold"] = self.fields["gold"].value
-        data["lives"] = self.fields["lives"].value
-        data["order"] = self.fields["order"].value
-        data["race"] = self.fields["race"].value
-        data["terrain_tint"] = (self.fields["terrain_tint"].value
-                                if self.fields["terrain_tint_enabled"].value else None)
+        data.update(self.collect())
         data["grid"] = self.map.rows()
-        data["available_units"] = self.avail_sel.value
-        data["enemy_pool"] = self.enemy_sel.value
         idx = self.items.index(self.current)
         self.items[idx] = data
         self.current = data
+        self.rebase()
+
+    # -- undo ---------------------------------------------------------------
+    def _snapshot(self):
+        return {"items": deepcopy(self.items),
+                "selected": self.current.get("id") if self.current else None}
+
+    def _restore(self, state):
+        self._restoring = True
+        try:
+            self.items[:] = deepcopy(state["items"])
+            selected = None
+            for item in self.items:
+                if item.get("id") == state["selected"]:
+                    selected = item
+            self.refresh(select=selected if selected is not None
+                         else (self.items[0] if self.items else None))
+        finally:
+            self._restoring = False
+
+    def _stroke_begin(self):
+        """Remember the level as it was when the stroke started.
+
+        The items still hold the pre-stroke grid (it only reaches them through
+        ``apply_current``), so this snapshot is exactly what an undo needs.
+        Pushing it only when the stroke actually changed something keeps a click
+        on an already-correct cell from spending an undo step.
+        """
+        self._stroke_state = self._snapshot()
+
+    def _stroke_end(self, changed):
+        if changed and self._stroke_state is not None:
+            self.record_state(self._stroke_state, "paint")
+        self._stroke_state = None
 
     # -- waves --------------------------------------------------------------
     def _waves(self):
@@ -1223,18 +1804,21 @@ class LevelsTab:
         self._refresh_waves()
 
     def add_wave(self):
+        self._apply_group_fields()
         self._waves().append([])
         self.wave_index = len(self._waves()) - 1
         self.group_index = 0
         self._refresh_waves()
 
     def del_wave(self):
+        self._apply_group_fields()
         waves = self._waves()
         if 0 <= self.wave_list.index < len(waves):
             waves.pop(self.wave_list.index)
         self._refresh_waves()
 
     def dup_wave(self):
+        self._apply_group_fields()
         waves = self._waves()
         if 0 <= self.wave_list.index < len(waves):
             waves.insert(self.wave_list.index + 1,
@@ -1242,12 +1826,14 @@ class LevelsTab:
         self._refresh_waves()
 
     def clear_wave(self):
+        self._apply_group_fields()
         waves = self._waves()
         if 0 <= self.wave_list.index < len(waves):
             waves[self.wave_list.index] = []
         self._refresh_waves()
 
     def add_group(self):
+        self._apply_group_fields()
         waves = self._waves()
         idx = self.wave_list.index
         if not (0 <= idx < len(waves)):
@@ -1262,6 +1848,7 @@ class LevelsTab:
         self._refresh_waves()
 
     def del_group(self):
+        self._apply_group_fields()
         waves = self._waves()
         idx = self.wave_list.index
         if 0 <= idx < len(waves) and 0 <= self.group_list.index < len(waves[idx]):
@@ -1271,6 +1858,7 @@ class LevelsTab:
     # -- list buttons -------------------------------------------------------
     def new(self):
         self.apply_current()
+        self.record("new")
         data = self.default_entry()
         ids = {i.get("id") for i in self.items}
         n = 2
@@ -1285,9 +1873,8 @@ class LevelsTab:
         if self.current is None:
             return
         self.apply_current()
-        data = dict(self.current)
-        data["waves"] = [[list(g) for g in w] for w in (data.get("waves") or [])]
-        data["grid"] = list(data.get("grid") or [])
+        self.record("duplicate")
+        data = deepcopy(self.current)
         base = str(data["id"]) + "_copy"
         ids = {i.get("id") for i in self.items}
         new_id, n = base, 2
@@ -1303,6 +1890,7 @@ class LevelsTab:
         if self.current is None:
             return
         item = self.current
+        self.record("delete")
         self.items.remove(item)
         self.current = None
         self.refresh()
@@ -1322,18 +1910,58 @@ class LevelsTab:
         # keep each race's level list in sync with the levels that name it
         for race in self.app.content.races.values():
             linked = sorted((i["id"] for i in self.items if i.get("race") == race["id"]),
-                            key=lambda lid: ([i.get("order", 0) for i in self.items
-                                              if i.get("id") == lid] + [0])[0])
+                            key=lambda lid: [i.get("order", 0) for i in self.items
+                                             if i.get("id") == lid])
             race = dict(race)
             race["levels"] = linked
             self.app.content.save_race(race)
         self.app.content.reload()
         art.clear_caches()
+        self.mark_saved()
         self.app.set_status("Levels: saved {} entries".format(len(self.items)))
 
-    # -- events / draw ------------------------------------------------------
+    # -- events -------------------------------------------------------------
+    def _resize_to_fields(self):
+        """Apply a typed grid W / H to the canvas (undoable, like a paint)."""
+        width = max(1, int(self.fields["width"].value or 0))
+        height = max(1, int(self.fields["height"].value or 0))
+        if (width, height) == (self.map.width, self.map.height):
+            return False
+        self.record("resize")
+        self.map.resize(width, height)
+        self._sync_size_fields()
+        return True
+
     def handle_event(self, event):
-        for w in (self.list, self.wave_list, self.group_list):
+        action = self.undo_key(event)
+        if action is not None:
+            self.undo() if action == "undo" else self.redo()
+            return True
+        if self.map.handle_event(event):
+            # a paint / pan / zoom: the canvas is the document until we sync it
+            if not self._restoring:
+                self.apply_current()
+            return True
+        if self.list.handle_event(event):        # selection is never undoable
+            return True
+        self._recorded = False
+        before = self._signature()
+        handled = self._dispatch(event)
+        if not handled:
+            return False
+        self._resize_to_fields()
+        if not self._recorded and not self._restoring \
+                and before != self._signature():
+            self.record("edit")
+            self.app.set_status("Levels: change recorded ({})".format(
+                self.history.status()), W.DIM)
+        # keep items (grid included) in lock-step with the widgets and canvas
+        if not self._restoring:
+            self.apply_current()
+        return True
+
+    def _dispatch(self, event):
+        for w in (self.wave_list, self.group_list):
             if w.handle_event(event):
                 return True
         for b in self.list_buttons + self.wave_buttons + self.group_buttons:
@@ -1344,56 +1972,22 @@ class LevelsTab:
                 return True
         for field in (self.g_unit, self.g_count, self.g_interval):
             if field.handle_event(event):
+                self._apply_group_fields()
                 return True
         if self.avail_sel.handle_event(event) or self.enemy_sel.handle_event(event):
             return True
-        if self._palette_click(event):
-            return True
-        if self.map.handle_event(event):
-            self.fields["width"].set_value(self.map.width)
-            self.fields["height"].set_value(self.map.height)
-            return True
-        return False
+        return self._palette_click(event)
 
-    def draw(self):
-        self.ctx.canvas.fill((0, 0, 0))
-        _text(self.ctx, "Levels", (LEVEL_FORM_X, FORM_TOP - 30), W.TEXT, "big")
-        self.list.draw(self.ctx.canvas)
-        for b in self.list_buttons:
-            b.draw(self.ctx.canvas)
-
-        self.map.draw()
-        status = "path OK" if self.map.path_ok else "NO PATH from S to B"
-        _text(self.ctx, "Map ({})  -  {}".format(
-            "{}x{}".format(self.map.width, self.map.height), status),
-            (MAP_RECT.x, MAP_RECT.y - 22), W.OK if self.map.path_ok else W.BAD)
-        self._draw_palette()
-
-        _text(self.ctx, "Available units", (AVAIL_RECT.x, AVAIL_RECT.y - 20))
-        _text(self.ctx, "Enemy pool", (ENEMY_RECT.x, ENEMY_RECT.y - 20))
-        self.avail_sel.draw(self.ctx.canvas)
-        self.enemy_sel.draw(self.ctx.canvas)
-
-        for field in self.fields.values():
-            field.draw(self.ctx.canvas)
-        _text(self.ctx, "Waves", (LEVEL_FORM_X, 236))
-        self.wave_list.draw(self.ctx.canvas)
-        for b in self.wave_buttons:
-            b.draw(self.ctx.canvas)
-        _text(self.ctx, "Units in selected wave", (LEVEL_FORM_X, 430))
-        self.group_list.draw(self.ctx.canvas)
-        for b in self.group_buttons:
-            b.draw(self.ctx.canvas)
-        for field in (self.g_unit, self.g_count, self.g_interval):
-            field.draw(self.ctx.canvas)
-
+    # -- palette ------------------------------------------------------------
     def palette_rects(self):
         """``[(rect, grid_char), ...]`` for every swatch, in draw order."""
         entries = [(t.get("char", "?")) for t in self.app.terrain_tab.items]
         entries = entries + ["S", "B"]
         rects = []
         for i, ch in enumerate(entries):
-            rect = pygame.Rect(MAP_RECT.x + i * 48, PALETTE_Y, 44, 44)
+            rect = pygame.Rect(L.MAP_X + (i % L.PAL_COLS) * L.PAL_PITCH,
+                               self.palette_top + (i // L.PAL_COLS) * L.PAL_ROW_H,
+                               L.PAL_SWATCH, L.PAL_SWATCH)
             rects.append((rect, ch))
         return rects
 
@@ -1413,7 +2007,6 @@ class LevelsTab:
         for rect, ch in self.palette_rects():
             if ch in ("S", "B"):
                 img = art.scaled(art.tile(133 if ch == "S" else 180), (44, 44))
-                name = "spawn" if ch == "S" else "base"
             else:
                 terr = lookup.get(ch)
                 if terr is None:
@@ -1421,14 +2014,66 @@ class LevelsTab:
                 img = art.sprite(terr.get("sprite") or
                                  {"kind": "pack", "tile": terr.get("base", 157)},
                                  44, terr.get("tint"))
-                name = terr.get("name", ch)
             self.ctx.canvas.blit(img, rect)
             sel = self.map.selected == ch
             pygame.draw.rect(self.ctx.canvas, W.ACCENT if sel else W.EDGE,
                              rect, 3 if sel else 1)
             _text(self.ctx, ch, (rect.x + 2, rect.y + 1), (255, 255, 255))
             if ch not in ("S", "B"):
-                _text(self.ctx, name, (rect.x, rect.bottom + 1), W.DIM)
+                name = lookup.get(ch, {}).get("name", ch)
+                _text(self.ctx, str(name)[:9], (rect.x, rect.bottom + 1), W.DIM)
+
+    # -- drawing ------------------------------------------------------------
+    def draw(self):
+        self.ctx.canvas.fill((0, 0, 0))
+        self._draw_title()
+        self.list.draw(self.ctx.canvas)
+        for b in self.list_buttons:
+            b.draw(self.ctx.canvas)
+        self._draw_history_status(L.LIST_X, L.LIST_HINT_Y, L.LEVELS_LIST_W)
+
+        self.map.draw()
+        self._draw_map_readout()
+        self._draw_palette()
+        for b in self.zoom_buttons:
+            b.draw(self.ctx.canvas)
+        _right_text(self.ctx, "{} px / cell   -   {}".format(
+            self.map.cell, self._visible_cells()), L.MAP_X + L.MAP_W,
+            self.zoom_y + 5, W.OK if self.map.fits else W.ACCENT)
+
+        _text(self.ctx, "Available units", (self.avail_sel.rect.x, L.SEL_LABEL_Y))
+        _text(self.ctx, "Enemy pool", (self.enemy_sel.rect.x, L.SEL_LABEL_Y))
+        self.avail_sel.draw(self.ctx.canvas)
+        self.enemy_sel.draw(self.ctx.canvas)
+
+        for field in self.fields.values():
+            field.draw(self.ctx.canvas)
+        _text(self.ctx, "Waves", (L.LEVEL_FORM_X, L.WAVE_LABEL_Y))
+        self.wave_list.draw(self.ctx.canvas)
+        for b in self.wave_buttons:
+            b.draw(self.ctx.canvas)
+        _text(self.ctx, "Units in selected wave",
+              (L.LEVEL_FORM_X, L.GROUP_LABEL_Y))
+        self.group_list.draw(self.ctx.canvas)
+        for b in self.group_buttons:
+            b.draw(self.ctx.canvas)
+        for field in (self.g_unit, self.g_count, self.g_interval):
+            field.draw(self.ctx.canvas)
+        _text(self.ctx, "space+drag / middle / right drag pans",
+              (L.LEVEL_FORM_X, L.GROUP_FIELD_Y + 34), W.DIM)
+
+    def _draw_map_readout(self):
+        status = "path OK" if self.map.path_ok else "NO PATH from S to B"
+        colour = W.OK if self.map.path_ok else W.BAD
+        _text(self.ctx, "Map {} x {} cells   -   {}".format(
+            self.map.width, self.map.height, status), (L.MAP_X, L.TOP), colour)
+        _right_text(self.ctx, "wheel: zoom   drag: pan   Ctrl+Z: undo",
+                    L.MAP_X + L.MAP_W, L.TOP, W.DIM)
+
+    def _visible_cells(self):
+        x0, y0, x1, y1 = self.map.visible_range()
+        return "{}x{} of {}x{}".format(x1 - x0 + 1, y1 - y0 + 1,
+                                      self.map.width, self.map.height)
 
 
 # ===========================================================================
@@ -1446,51 +2091,65 @@ class HelpTab:
             "Tabs (top bar): Terrain | Units | Races | Levels | Help",
             "",
             "Lists are on the left; click a row to edit it.  New / Dup / Delete /",
-            "Save act on the current list.  Save writes JSON to content/ and also",
-            "keeps files tidy by removing deleted entries.",
+            "Save act on the current list.  Undo / Redo sit under them, and",
+            "Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) work anywhere on a tab.",
+            "Save writes JSON to content/ and also keeps files tidy by removing",
+            "deleted entries.  A '*' next to a tab title means unsaved changes.",
+            "",
+            "Undo: every mutating action (paint stroke, field edit, wave edit,",
+            "resize, new/delete) stores the whole document as it was *before*",
+            "the change, up to 50 steps.  Undo puts it back into the list, the",
+            "widgets and the map.  Zoom, pan and picking a different list row",
+            "are not edits, so they never take an undo step.",
+            "",
+            "Map canvas (Levels tab):",
+            "  The panel is fixed; the cell size is the zoom (6..48 px).",
+            "  Mouse wheel over the map zooms, keeping the point under the",
+            "  cursor fixed.  'zoom -' / 'zoom +' / 'fit map' / 'top left' are",
+            "  the same controls, for trackpads without a wheel.",
+            "  Pan: drag with the middle mouse button, hold Space and drag",
+            "  with the left button, or right-drag.  A plain right *click*",
+            "  still erases a cell back to grass, so a pan is never mistaken",
+            "  for a paint stroke.  The corner box shows where you are.",
+            "  Left click paints the selected terrain, left drag paints a",
+            "  stroke.  Only the visible cells are drawn, so a 60x40 map",
+            "  stays smooth.  'grid W' / 'grid H' resize the map.",
+            "  A yellow line previews the route; NO PATH means unplayable.",
             "",
             "Terrain:  a grid character maps to a base tile + optional overlay.",
             "  buildable = players may place defenders there.",
             "  walkable  = ground enemies may path through it.",
             "  The spawn 'S' and base 'B' characters are reserved.",
+            "  Click the base / overlay preview for a static image or animation.",
             "",
             "Units:  one schema for both sides.",
             "  side=defender -> placed by the player (a 'tower'); side=attacker ->",
             "    spawned by enemy waves.",
             "  movement: static | chase | route | direct | hunt",
-            "     static  = classic turret",
-            "     chase   = defender walks after the nearest enemy (e.g. Scorpion)",
-            "     route   = attacker follows the map path",
-            "     direct  = attacker flies straight at the base",
-            "     hunt    = attacker leaves the path to chase a defender",
-            "  attack: none | melee | projectile   (enemies with an attack hurt",
-            "     towers, so both sides fight)",
-            "  sprite: CLICK THE PREVIEW ICON to set art.  The designer asks:",
-            "     - Static image: pick one PNG (a single picture).",
-            "     - Animation: pick a spritesheet, then highlight its frames per",
-            "       state (idle / walk / attack / death) in the animation editor.",
-            "     Click a frame to add/remove it, shift-click to add a range; set",
-            "     each state's fps and loop.  A static image is kept as the",
-            "     fallback for any state you leave empty.",
-            "  the game auto-plays the matching state (still/moving/firing/killed).",
-            "  You can still hand-edit the sprite kind (pack/image/shape/sheet/anim).",
+            "  attack: none | melee | projectile",
+            "  shots / attack: how many projectiles one attack fires.",
+            "  Upgrade paths: a defender picks one branch per level-up instead",
+            "    of one linear ladder.  Each branch has an id, a name, four",
+            "    gain multipliers (dmg / range / rate / hp, 1.0 = unchanged)",
+            "    and an additive '+shots'.  'default' restores the five",
+            "    shipped branches.  Every gain is written out, so what you",
+            "    type survives save + reload.",
+            "  sprite: CLICK THE PREVIEW to set art - static image or an",
+            "    animation split into idle / walk / attack / death.",
             "  tint: overrides the race tint (handy for recoloured variants).",
             "",
-            "Terrain:  base + optional overlay can each be a Kenney tile or your",
-            "  own art.  Click the base or overlay preview to pick a static image",
-            "  or a looping animation - so you can drop in custom ground tiles,",
-            "  animated water/lava, decals, and so on.",
+            "Races:  a campaign.  Pick which defender units are on offer and",
+            "which attackers the levels use.  The base hero is the defender",
+            "summoned when an attacker reaches the base ((none) to clear it).",
+            "Levels are attached from the Levels tab.",
             "",
-            "Races:  a campaign.  Pick which defender units are on offer and which",
-            "  attackers the levels use.  Levels are attached from the Levels tab.",
-            "",
-            "Levels:  paint the map (left-click paints the selected terrain, right-",
-            "  click erases to grass).  Click a palette swatch to choose the brush",
-            "  (the spawn 'S' and base 'B' are in the palette).  A yellow line",
-            "  previews the route; if it says NO PATH the level cannot be played.",
-            "  'Available units' are the level's shop; 'Enemy pool' its attacker",
-            "  roster.  Build waves below: each wave holds unit groups (unit, count,",
-            "  spawn gap seconds).",
+            "Levels:  the right-hand form holds the economy and the grid size.",
+            "  gold / sec is passive income (0..{:g}, the default is {:g}) -",
+            "  the main per-level difficulty knob.".format(
+                S.GOLD_PER_SEC_MAX, S.DEFAULT_GOLD_PER_SEC),
+            "  'Available units' are the level's shop; 'Enemy pool' its",
+            "  attacker roster.  Build waves below: each wave holds unit",
+            "  groups (unit, count, spawn gap seconds).",
             "",
             "Everything saves to content/ - the game reads the same files.",
         ]
@@ -1500,7 +2159,7 @@ class HelpTab:
 
     def _max_scroll(self):
         total = sum(self._heights)
-        return max(0, 64 + total - self.ctx.canvas.get_height() + 12)
+        return max(0, L.TOP + total - self.ctx.canvas.get_height() + 12)
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEWHEEL:
@@ -1510,12 +2169,12 @@ class HelpTab:
 
     def draw(self):
         self.ctx.canvas.fill((0, 0, 0))
-        y = 64 - self.scroll
+        y = L.TOP - self.scroll
         for line, h in zip(self.lines, self._heights):
-            if y + h >= 64 and y <= self.ctx.canvas.get_height():
+            if y + h >= L.TOP and y <= self.ctx.canvas.get_height():
                 key = "big" if h == 34 else "default"
                 color = W.TEXT if not line.startswith("  ") else W.DIM
                 _text(self.ctx, line, (40, y), color, key)
             y += h
         if self._max_scroll() > 0:
-            _text(self.ctx, "scroll with the mouse wheel", (40, 40), W.ACCENT)
+            _text(self.ctx, "scroll with the mouse wheel", (40, L.TITLE_Y), W.ACCENT)

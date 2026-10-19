@@ -165,6 +165,7 @@ DEFAULT_UNIT = {
     "range": 120.0,
     "damage": 5.0,
     "cooldown": 0.5,
+    "projectiles": 1,            # shots fired per attack
     "projectile": "dot",         # dot | rocket
     "splash": 0.0,
     "sound": "gun",
@@ -177,6 +178,7 @@ DEFAULT_UNIT = {
     "radius": 16.0,
     "can_be_attacked": True,
     "description": "",
+    "upgrade_paths": None,       # None -> DEFAULT_UPGRADE_PATHS
 }
 
 UNIT_MOVEMENTS = ("static", "chase", "route", "direct", "hunt")
@@ -184,6 +186,18 @@ UNIT_ATTACKS = ("none", "melee", "projectile")
 UNIT_TARGETS = ("ground", "air", "both")
 UNIT_TARGETING = ("", "nearest", "first", "strongest", "weakest")
 UNIT_SIDES = ("defender", "attacker")
+
+# Branches a defender can take instead of one linear ladder.  ``gains`` keys:
+# damage / range / rate / hp are multipliers, ``projectiles`` is additive.
+DEFAULT_UPGRADE_PATHS = [
+    {"id": "damage", "name": "Damage", "gains": {"damage": 1.6}},
+    {"id": "range", "name": "Range", "gains": {"range": 1.12}},
+    {"id": "rapid", "name": "Rapid Fire", "gains": {"rate": 0.82}},
+    {"id": "multi", "name": "Multi Shot",
+     "gains": {"projectiles": 1, "damage": 0.92}},
+    {"id": "vitality", "name": "Vitality", "gains": {"hp": 1.25}},
+]
+UPGRADE_GAIN_KEYS = ("damage", "range", "rate", "hp")
 
 # The named states a unit can animate.  The engine plays a matching animation
 # automatically: idle when still, walk when moving, attack when firing, death
@@ -232,6 +246,38 @@ def normalise_animation(spec):
         "fps": max(0.1, _num(spec.get("fps"), 8.0)),
         "loop": bool(spec.get("loop", True)),
     }
+
+
+def normalise_upgrade_paths(spec):
+    """Normalise a unit's upgrade branches.
+
+    ``None``/empty falls back to :data:`DEFAULT_UPGRADE_PATHS` so every
+    defender can always be upgraded along several distinct axes.  Each entry
+    becomes ``{"id", "name", "gains"}`` where gains hold multipliers for
+    ``damage``/``range``/``rate``/``hp`` and an additive ``projectiles``.
+    """
+    if not spec:
+        return [dict(p, gains=dict(p["gains"])) for p in DEFAULT_UPGRADE_PATHS]
+    out = []
+    for raw in spec:
+        if not isinstance(raw, dict):
+            continue
+        pid = str(raw.get("id") or "").strip()
+        if not pid:
+            continue
+        gains = {}
+        raw_gains = raw.get("gains")
+        if isinstance(raw_gains, dict):
+            for key in UPGRADE_GAIN_KEYS:
+                if raw_gains.get(key) is not None:
+                    gains[key] = max(0.01, _num(raw_gains.get(key), 1.0))
+            if raw_gains.get("projectiles") is not None:
+                gains["projectiles"] = _int(raw_gains.get("projectiles"), 0)
+        if not gains:
+            continue                      # a branch that changes nothing is useless
+        out.append({"id": pid, "name": str(raw.get("name") or pid.title()),
+                    "gains": gains})
+    return out or [dict(p, gains=dict(p["gains"])) for p in DEFAULT_UPGRADE_PATHS]
 
 
 def normalise_sprite(spec, default_tile=226):
@@ -302,6 +348,7 @@ class UnitType:
         self.range = max(0.0, _num(data.get("range"), 120.0))
         self.damage = max(0.0, _num(data.get("damage"), 5.0))
         self.cooldown = max(0.01, _num(data.get("cooldown"), 0.5))
+        self.projectiles = max(1, _int(data.get("projectiles"), 1))
         self.projectile = data.get("projectile") if data.get("projectile") in ("dot", "rocket") else "dot"
         self.splash = max(0.0, _num(data.get("splash"), 0.0))
         self.sound = str(data.get("sound") or "gun")
@@ -314,8 +361,19 @@ class UnitType:
         self.radius = max(4.0, _num(data.get("radius"), 16.0))
         self.can_be_attacked = bool(data.get("can_be_attacked", True))
         self.description = str(data.get("description") or "")
+        self.upgrade_paths = normalise_upgrade_paths(data.get("upgrade_paths"))
         known = set(DEFAULT_UNIT)
         self.extra = {k: v for k, v in data.items() if k not in known}
+
+    def upgrade_path(self, path_id):
+        """The branch with this id, or ``None``."""
+        for path in self.upgrade_paths:
+            if path["id"] == path_id:
+                return path
+        return None
+
+    def upgrade_path_ids(self):
+        return [p["id"] for p in self.upgrade_paths]
 
     @staticmethod
     def _sprite(spec):
@@ -353,6 +411,7 @@ class UnitType:
             "range": self.range,
             "damage": self.damage,
             "cooldown": self.cooldown,
+            "projectiles": self.projectiles,
             "projectile": self.projectile,
             "splash": self.splash,
             "sound": self.sound,
@@ -365,6 +424,10 @@ class UnitType:
             "radius": self.radius,
             "can_be_attacked": self.can_be_attacked,
             "description": self.description,
+            "upgrade_paths": [
+                {"id": p["id"], "name": p["name"], "gains": dict(p["gains"])}
+                for p in self.upgrade_paths
+            ],
             **self.extra,
         }
 
@@ -382,6 +445,7 @@ RACE_DEFAULT = {
     "units": [],             # defender unit ids on offer
     "enemies": [],           # attacker unit ids used when a level has no pool
     "levels": [],            # ordered level ids
+    "hero": None,            # defender unit id summoned when the base is hit
 }
 
 LEVEL_DEFAULT = {
@@ -390,6 +454,7 @@ LEVEL_DEFAULT = {
     "name": "Level",
     "description": "",
     "gold": 220,
+    "gold_per_sec": None,     # passive income; None -> DEFAULT_GOLD_PER_SEC
     "lives": 20,
     "grid": [],
     "terrain_tint": None,

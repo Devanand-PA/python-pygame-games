@@ -18,6 +18,36 @@ from engine.projectiles import Effects, Projectile
 from engine.units import Unit
 
 
+def _shrink(surface, max_w):
+    """Scale a rendered label down slightly when it would overflow ``max_w``."""
+    if max_w <= 0 or surface.get_width() <= max_w:
+        return surface
+    scale = max_w / float(surface.get_width())
+    return pygame.transform.smoothscale(
+        surface, (max(1, int(surface.get_width() * scale)), surface.get_height()))
+
+
+def _gold(value):
+    """Whole coins for display.
+
+    Gold is tracked as a float because passive income accrues every frame, so
+    rendering it raw would print something like ``193.0859999``.  Truncating
+    (rather than rounding) means the number shown is never more than the gold
+    the player can actually spend.  The tiny epsilon absorbs float drift from
+    summing many small incomes.
+    """
+    return int(value + 1e-6) if value > 0 else 0
+
+
+def _fit_text(text, font, max_w):
+    """Truncate ``text`` with an ellipsis so it fits inside ``max_w``."""
+    if max_w <= 0 or font.size(text)[0] <= max_w:
+        return text
+    while text and font.size(text + "...")[0] > max_w:
+        text = text[:-1]
+    return (text + "...") if text else ""
+
+
 class GameScene(Scene):
     scene_type = "game"
 
@@ -34,6 +64,10 @@ class GameScene(Scene):
 
         self.gold = self.level_def["gold"]
         self.lives = self.level_def["lives"]
+        # passive income, scaled per level (absent -> the global default)
+        rate = self.level_def.get("gold_per_sec")
+        self.income_rate = (S.DEFAULT_GOLD_PER_SEC if rate is None
+                            else max(0.0, min(S.GOLD_PER_SEC_MAX, float(rate))))
         self.wave_number = 0
         self.waves = self.level_def["waves"]
         self.state = "build"                 # build | wave | won | lost
@@ -51,6 +85,14 @@ class GameScene(Scene):
         self.session_kills = 0
         self.gold_earned = 0
         self.speed_mult = 1
+
+        # --- base and the race hero -----------------------------------------
+        self.base_level = 1                  # bought with gold, strengthens the hero
+        self.base_selected = False           # info panel showing the base
+        self.hero = None                     # live hero Unit
+        self.hero_type = self._hero_type()
+        self.hero_respawn = 0.0              # seconds until the hero can return
+        self.hero_calls = 0
 
         self.shop_units = self.content.level_defenders(self.level_def)
         self.selected_shop = None            # UnitType while placing
@@ -82,20 +124,34 @@ class GameScene(Scene):
         self.wave_btn = pygame.Rect(S.CANVAS_W - 150, self.hud_rect.y + 8, 138, 30)
         self.speed_btn = pygame.Rect(S.CANVAS_W - 150, self.hud_rect.y + 44, 66, 28)
         self.pause_btn = pygame.Rect(S.CANVAS_W - 78, self.hud_rect.y + 44, 66, 28)
-        self.info_panel = pygame.Rect(S.CANVAS_W - 336, self.hud_rect.y - 140, 324, 134)
+        self.info_panel = pygame.Rect(S.CANVAS_W - 336, self.hud_rect.y - 200, 324, 200)
         # minimap lives in the top-right corner of the viewport
         self.minimap_rect = pygame.Rect(
             S.CANVAS_W - S.MINIMAP_W - S.MINIMAP_MARGIN, S.MINIMAP_MARGIN,
             S.MINIMAP_W, S.MINIMAP_H)
 
     # ================================================================= waves
+    def early_call_bonus(self):
+        """Gold owed for calling the next wave early.
+
+        Pays for the build time you skip: a flat rate per remaining countdown
+        second plus a share of the level's passive income, so it stays worth
+        chasing at any ``gold_per_sec``.  Single source of truth -- the HUD
+        label and the payout both call this.
+        """
+        if self.state != "build" or self.countdown <= 0.0:
+            return 0
+        rate = S.EARLY_CALL_BONUS + self.income_rate * S.EARLY_CALL_INCOME_MULT
+        return int(self.countdown * rate)
+
     def start_wave(self, early=False):
         if self.state != "build" or self.wave_number >= len(self.waves):
             return
-        if early and self.countdown > 0.0:
-            bonus = int(self.countdown * S.EARLY_CALL_BONUS)
-            self.gold += bonus
-            self.gold_earned += bonus
+        if early:
+            bonus = self.early_call_bonus()
+            if bonus > 0:
+                self.gold += bonus
+                self.gold_earned += bonus
         self.wave_number += 1
         self.state = "wave"
         self.wave_time = 0.0
@@ -142,6 +198,11 @@ class GameScene(Scene):
             self._step(delta_time)
 
     def _step(self, dt):
+        # passive income only pays out while a wave is actually running, so the
+        # build phase is where the early-call bonus is the only thing on offer
+        if self.income_rate > 0.0 and self.state == "wave":
+            self.gold += self.income_rate * dt
+            self.gold_earned += self.income_rate * dt
         if self.state == "build" and not self.first_wave_pending:
             self.countdown -= dt
             if self.countdown <= 0.0:
@@ -173,6 +234,7 @@ class GameScene(Scene):
 
         self._reap()
         self.projectiles = [p for p in self.projectiles if not p.dead]
+        self._update_hero(dt)
 
         if self.state == "wave" and not self.spawn_queue and not self.attackers:
             self._wave_cleared()
@@ -234,6 +296,80 @@ class GameScene(Scene):
 
     def _fire(self, unit, target):
         self.projectiles.append(Projectile(unit, target))
+
+    # ================================================================== hero
+    def _hero_type(self):
+        """The defender unit this race summons to defend its base."""
+        hero_id = (self.race or {}).get("hero")
+        if not hero_id:
+            return None
+        utype = self.content.unit(hero_id)
+        if utype is None or utype.is_attacker:
+            return None
+        return utype
+
+    def base_center(self):
+        return self.level.cell_center(self.level.base_cell)
+
+    def base_upgrade_cost(self):
+        """Gold for the next base level, or ``None`` when already maxed."""
+        if self.base_level >= S.BASE_MAX_LEVEL:
+            return None
+        return int(round(S.BASE_UPGRADE_COST
+                         * S.BASE_UPGRADE_COST_GAIN ** (self.base_level - 1)))
+
+    def upgrade_base(self):
+        """Spend gold on the base; the race hero gets stronger with it."""
+        cost = self.base_upgrade_cost()
+        if cost is None or self.gold < cost:
+            return False
+        self.gold -= cost
+        self.base_level += 1
+        if self.hero is not None and self.hero.alive:
+            self.hero.apply_base_bonus(self.base_level - 1)
+        self.game.play("upgrade", 0.5)
+        return True
+
+    def _hero_is_out(self):
+        return self.hero is not None and self.hero.alive
+
+    def _base_threatened(self):
+        base = self.base_center()
+        reach = S.HERO_TRIGGER_RANGE + S.TILE
+        for attacker in self.attackers:
+            if not attacker.alive:
+                continue
+            if ((attacker.pos[0] - base[0]) ** 2
+                    + (attacker.pos[1] - base[1]) ** 2) <= reach * reach:
+                return True
+        return False
+
+    def call_hero(self, force=False):
+        """Summon the race hero. Normally automatic when the base is attacked."""
+        if self.hero_type is None or self.state in ("won", "lost"):
+            return None
+        if self._hero_is_out():
+            return self.hero
+        if not force and (self.hero_respawn > 0.0 or not self._base_threatened()):
+            return None
+        base = self.base_center()
+        hero = Unit(self.hero_type, base, home=base, race_tint=self.race_tint)
+        hero.is_hero = True
+        hero.apply_base_bonus(self.base_level - 1)
+        self.defenders.append(hero)
+        self.hero = hero
+        self.hero_calls += 1
+        self.game.play("upgrade", 0.5)
+        return hero
+
+    def _update_hero(self, dt):
+        if self.hero_respawn > 0.0:
+            self.hero_respawn -= dt
+        if self._hero_is_out():
+            return
+        if self.hero is not None and not self.hero.alive:
+            self.hero_respawn = S.HERO_RESPAWN_COOLDOWN
+        self.call_hero()
 
     # ================================================================= events
     def handle_event(self, event):
@@ -391,7 +527,8 @@ class GameScene(Scene):
                 return
         if pos[1] >= self.hud_rect.y:
             return
-        if self.info_panel.collidepoint(pos) and self.selected_unit is not None:
+        if self.info_panel.collidepoint(pos) and (self.selected_unit is not None
+                                                or self.base_selected):
             self._panel_click(pos)
             return
         if self.minimap_rect.collidepoint(pos):
@@ -402,15 +539,28 @@ class GameScene(Scene):
             return
 
         world = self.camera.screen_to_world(pos)
+        if self._base_at(world):
+            self.base_selected = True
+            self.selected_unit = None
+            self.selected_shop = None
+            return
         unit = self._unit_at(world)
         if unit is not None:
             self.selected_unit = unit
+            self.base_selected = False
             self.selected_shop = None
             return
         if self.selected_shop is not None:
             self._try_place(self.level.cell_of(world))
             return
         self.selected_unit = None
+        self.base_selected = False
+
+    def _base_at(self, world_pos):
+        """True when a click landed on the base pad."""
+        bx, by = self.base_center()
+        return ((world_pos[0] - bx) ** 2 + (world_pos[1] - by) ** 2
+                <= (S.TILE * 0.75) ** 2)
 
     def _unit_at(self, pos):
         cell = self.level.cell_of(pos)
@@ -443,20 +593,20 @@ class GameScene(Scene):
             self.selected_shop = None
 
     def _panel_click(self, pos):
+        if self.base_selected:
+            self._base_panel_click(pos)
+            return
         unit = self.selected_unit
         if unit is None:
             return
-        if self._panel_upgrade_rect().collidepoint(pos):
-            cost = unit.upgrade_cost()
-            if cost is None:
+        for rect, path in self._panel_upgrade_rects():
+            if rect.collidepoint(pos):
+                self._buy_upgrade(unit, path["id"])
                 return
-            if self.gold >= cost:
-                self.gold -= cost
-                unit.upgrade()
-                self.game.play("upgrade", 0.5)
-            else:
-                self.game.play("error", 0.5)
-        elif self._panel_sell_rect().collidepoint(pos):
+        if self._panel_sell_rect().collidepoint(pos):
+            if unit.is_hero:
+                self.game.play("error", 0.5)     # the hero is the base's, not yours
+                return
             self.gold += unit.sell_value()
             if unit.home is not None:
                 self.towers_by_cell.pop(unit.home, None)
@@ -465,13 +615,50 @@ class GameScene(Scene):
             self.selected_unit = None
             self.game.play("sell", 0.5)
 
-    def _panel_upgrade_rect(self):
-        return pygame.Rect(self.info_panel.x + 12, self.info_panel.bottom - 44,
-                           146, 34)
+    def _buy_upgrade(self, unit, path_id):
+        cost = unit.upgrade_cost()
+        if cost is None:
+            return
+        if self.gold < cost:
+            self.game.play("error", 0.5)
+            return
+        if not unit.upgrade(path_id):
+            return
+        self.gold -= cost
+        self.game.play("upgrade", 0.5)
+
+    def _base_panel_click(self, pos):
+        if self._base_upgrade_rect().collidepoint(pos):
+            if not self.upgrade_base():
+                self.game.play("error", 0.5)
+
+    # ------------------------------------------------------------ panel layout
+    def _panel_upgrade_rects(self):
+        """One button per upgrade branch the selected unit can still take."""
+        unit = self.selected_unit
+        if unit is None or unit.is_hero:
+            return []
+        choices = unit.upgrade_choices
+        if not choices:
+            return []
+        panel = self.info_panel
+        w = (panel.width - 24 - 16) // 3
+        h, gap = 30, 8
+        top = panel.y + 82
+        out = []
+        for i, path in enumerate(choices[:6]):
+            col, row = i % 3, i // 3
+            out.append((pygame.Rect(panel.x + 12 + col * (w + gap),
+                                    top + row * (h + gap), w, h), path))
+        return out
 
     def _panel_sell_rect(self):
         return pygame.Rect(self.info_panel.right - 158,
-                           self.info_panel.bottom - 44, 146, 34)
+                           self.info_panel.bottom - 40, 146, 30)
+
+    def _base_upgrade_rect(self):
+        panel = self.info_panel
+        return pygame.Rect(panel.x + 12, panel.bottom - 42, panel.width - 24, 32)
 
     def _end_screen_click(self, pos):
         box = self._end_box()
@@ -501,8 +688,9 @@ class GameScene(Scene):
     def on_draw(self):
         self.camera.update(self.game.delta_time)
         self._draw_world()
+        self._draw_status_chip()
         self._draw_hud()
-        if self.selected_unit is not None:
+        if self.selected_unit is not None or self.base_selected:
             self._draw_info_panel()
         self._draw_minimap()
         self._draw_shop_tooltip()
@@ -541,6 +729,41 @@ class GameScene(Scene):
         self.effects.draw(canvas, offset=offset)
         if self.selected_shop is not None:
             self._draw_ghost()
+
+    # ---------------------------------------------------------- status chip
+    def _draw_status_chip(self):
+        """Passive income and hero readiness, parked over the map.
+
+        The HUD's right side is already full of the wave/speed/pause controls,
+        so this goes in the free top-left corner of the viewport instead.
+        """
+        bits = []
+        if self.income_rate > 0.0:
+            bits.append(("+{:.1f} gold/s during waves".format(self.income_rate),
+                         S.GOLD_COLOR))
+        if self.hero_type is not None:
+            if self._hero_is_out():
+                bits.append(("Hero out", (150, 210, 150)))
+            elif self.hero_calls == 0:
+                bits.append(("Hero standing by", (150, 190, 150)))
+            else:
+                bits.append(("Hero {:.0f}s".format(max(0.0, self.hero_respawn)),
+                             (170, 170, 190)))
+        if not bits:
+            return
+        canvas = self.game.canvas
+        font = self.game.fonts["small"]
+        line_h = font.get_height() + 2
+        width = max(font.size(text)[0] for text, _c in bits) + 22
+        chip = pygame.Rect(self.view_rect.x + 10, self.view_rect.y + 10,
+                           width, len(bits) * line_h + 10)
+        veil = pygame.Surface(chip.size, pygame.SRCALPHA)
+        veil.fill((8, 8, 14, 190))
+        canvas.blit(veil, chip.topleft)
+        pygame.draw.rect(canvas, (56, 56, 78), chip, 1, border_radius=6)
+        for i, (text, color) in enumerate(bits):
+            canvas.blit(font.render(text, True, color),
+                        (chip.x + 10, chip.y + 5 + i * line_h))
 
     # ---------------------------------------------------------------- minimap
     def _draw_minimap(self):
@@ -674,7 +897,7 @@ class GameScene(Scene):
 
         font = self.game.fonts["default"]
         x = self.shop_buttons[-1][0].right + 20
-        canvas.blit(font.render("Gold: {}".format(self.gold), True,
+        canvas.blit(font.render("Gold: {}".format(_gold(self.gold)), True,
                                 S.GOLD_COLOR), (x, self.hud_rect.y + 8))
         canvas.blit(font.render("Lives: {}".format(self.lives), True,
                                 S.LIFE_COLOR), (x, self.hud_rect.y + 38))
@@ -692,7 +915,7 @@ class GameScene(Scene):
                 txt, color = "Start Wave 1", (96, 120, 70)
             else:
                 txt, color = ("Call wave (+{}g)".format(
-                    int(self.countdown * S.EARLY_CALL_BONUS)), (96, 120, 70))
+                    self.early_call_bonus()), (96, 120, 70))
         else:
             txt, color = "-", (60, 56, 80)
         pygame.draw.rect(canvas, color, self.wave_btn, border_radius=6)
@@ -709,37 +932,104 @@ class GameScene(Scene):
     # ------------------------------------------------------------- info panel
     def _draw_info_panel(self):
         canvas = self.game.canvas
-        unit = self.selected_unit
         panel = self.info_panel
         pygame.draw.rect(canvas, S.PANEL_BG, panel, border_radius=8)
         pygame.draw.rect(canvas, S.PANEL_EDGE, panel, 2, border_radius=8)
+        if self.base_selected:
+            self._draw_base_panel()
+        else:
+            self._draw_unit_panel()
+
+    def _draw_base_panel(self):
+        canvas = self.game.canvas
+        panel = self.info_panel
+        small = self.game.fonts["small"]
+        hero = self.hero_type
+        canvas.blit(self.game.fonts["default"].render(
+            "Base  Lv {}".format(self.base_level), True, S.TEXT_LIGHT),
+            (panel.x + 12, panel.y + 6))
+        if hero is None:
+            canvas.blit(small.render(
+                "No hero for this race.", True, (170, 170, 200)),
+                (panel.x + 12, panel.y + 34))
+            canvas.blit(small.render(
+                "Set a hero in the Races tab of the designer.",
+                True, (140, 140, 165)), (panel.x + 12, panel.y + 54))
+        else:
+            out = "out fighting" if self._hero_is_out() else (
+                "not called yet" if self.hero_calls == 0 else "resting")
+            canvas.blit(small.render(
+                "Hero: {}  ({})".format(hero.name, out), True, (200, 200, 215)),
+                (panel.x + 12, panel.y + 34))
+            bonus = self.base_level - 1
+            canvas.blit(small.render(
+                "Hero +{:.0f}% damage, +{:.0f}% hp, +{:.0f}% range".format(
+                    (S.BASE_HERO_DAMAGE_GAIN ** bonus - 1) * 100,
+                    (S.BASE_HERO_HP_GAIN ** bonus - 1) * 100,
+                    (S.BASE_HERO_RANGE_GAIN ** bonus - 1) * 100),
+                True, (150, 190, 150)), (panel.x + 12, panel.y + 54))
+            canvas.blit(small.render(_fit_text(
+                "Called automatically when an attacker reaches the base.",
+                small, panel.width - 24), True, (140, 140, 165)),
+                (panel.x + 12, panel.y + 74))
+
+        btn = self._base_upgrade_rect()
+        cost = self.base_upgrade_cost()
+        enabled = cost is not None and self.gold >= cost
+        text = ("Base maxed" if cost is None
+                else "Upgrade base ${}".format(cost))
+        pygame.draw.rect(canvas, (96, 120, 70) if enabled else (58, 54, 84),
+                         btn, border_radius=6)
+        canvas.blit(small.render(text, True, S.TEXT_LIGHT),
+                    small.render(text, True, S.TEXT_LIGHT).get_rect(center=btn.center))
+
+    def _draw_unit_panel(self):
+        canvas = self.game.canvas
+        unit = self.selected_unit
+        panel = self.info_panel
+        small = self.game.fonts["small"]
         title = "{}  Lv {}".format(unit.type.name, unit.level)
         canvas.blit(self.game.fonts["default"].render(title, True, S.TEXT_LIGHT),
                     (panel.x + 12, panel.y + 6))
-        small = self.game.fonts["small"]
+        shots = "  x{}".format(unit.projectiles) if unit.projectiles > 1 else ""
         canvas.blit(small.render(
-            "hp {:.0f}/{:.0f}   dmg {:5.1f}   range {:4.0f}   rate {:4.1f}/s".format(
+            "hp {:.0f}/{:.0f}  dmg {:5.1f}  rng {:4.0f}  {:4.1f}/s{}".format(
                 unit.hp, unit.max_hp, unit.damage, unit.range,
-                1.0 / max(0.01, unit.cooldown)), True, (200, 200, 215)),
-            (panel.x + 12, panel.y + 32))
-        mode = "{} / {}".format(unit.type.movement, unit.type.attack)
-        canvas.blit(small.render("mode {}   targets {}".format(
-            mode, unit.type.targets), True, (170, 170, 200)),
-            (panel.x + 12, panel.y + 54))
+                1.0 / max(0.01, unit.cooldown), shots), True, (200, 200, 215)),
+            (panel.x + 12, panel.y + 30))
+        taken = " > ".join(unit.upgrade_names()) or "no upgrades yet"
+        canvas.blit(small.render(
+            "{} / {}   {}".format(unit.type.movement, unit.type.attack, taken),
+            True, (170, 170, 200)), (panel.x + 12, panel.y + 52))
 
-        upg = self._panel_upgrade_rect()
-        sell = self._panel_sell_rect()
         cost = unit.upgrade_cost()
-        if cost is None:
-            upg_text, enabled = "MAX", False
+        choices = self._panel_upgrade_rects()
+        if choices:
+            canvas.blit(small.render("Upgrade  ${}".format(cost), True,
+                                     S.GOLD_COLOR if self.gold >= cost
+                                     else S.BAD_RED), (panel.x + 12, panel.y + 72))
+            for rect, path in choices:
+                afford = self.gold >= cost
+                pygame.draw.rect(canvas,
+                                 (96, 120, 70) if afford else (58, 54, 84),
+                                 rect, border_radius=6)
+                pygame.draw.rect(canvas, S.HUD_LINE, rect, 1, border_radius=6)
+                label = small.render(path["name"], True, S.TEXT_LIGHT)
+                label = _shrink(label, rect.width - 10)
+                canvas.blit(label, label.get_rect(center=rect.center))
+        elif unit.is_hero:
+            canvas.blit(small.render("Hero - upgrade it through the base.",
+                                     True, (150, 190, 150)),
+                        (panel.x + 12, panel.y + 82))
         else:
-            upg_text, enabled = "Upgrade ${}".format(cost), self.gold >= cost
-        pygame.draw.rect(canvas, (96, 120, 70) if enabled else (58, 54, 84),
-                         upg, border_radius=6)
-        canvas.blit(small.render(upg_text, True, S.TEXT_LIGHT),
-                    small.render(upg_text, True, S.TEXT_LIGHT).get_rect(center=upg.center))
-        pygame.draw.rect(canvas, (140, 70, 60), sell, border_radius=6)
-        sell_text = "Sell +${}".format(unit.sell_value())
+            canvas.blit(small.render("Fully upgraded.", True, (150, 190, 150)),
+                        (panel.x + 12, panel.y + 82))
+
+        sell = self._panel_sell_rect()
+        sell_text = ("Hero" if unit.is_hero
+                     else "Sell +${}".format(unit.sell_value()))
+        pygame.draw.rect(canvas, (140, 70, 60) if not unit.is_hero else (58, 54, 84),
+                         sell, border_radius=6)
         canvas.blit(small.render(sell_text, True, S.TEXT_LIGHT),
                     small.render(sell_text, True, S.TEXT_LIGHT).get_rect(center=sell.center))
 
@@ -769,7 +1059,7 @@ class GameScene(Scene):
                 self.wave_number if self.state == "won"
                 else max(0, self.wave_number - 1), len(self.waves)),
             "Kills: {}".format(self.session_kills),
-            "Gold earned: {}".format(self.gold_earned),
+            "Gold earned: {}".format(_gold(self.gold_earned)),
         ]
         y = box.y + 100
         for line in lines:

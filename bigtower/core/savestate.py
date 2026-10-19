@@ -9,6 +9,7 @@ files into directories that did not exist, and had no fallback when
 """
 import json
 import pathlib
+import shutil
 
 from core import paths
 
@@ -42,14 +43,48 @@ def list_users():
     return sorted(users)
 
 
-def create_user(user: str):
-    user = (user or "").strip()
-    if not user:
+def _validate_user_name(user: str) -> str:
+    """Normalise and sanity-check a profile name.
+
+    Rejects empty names, anything containing a path separator, ``.``/``..``
+    (which would escape the save root) and the leading-underscore names that
+    the game reserves for its own bookkeeping (``_config``).
+    """
+    name = (user or "").strip()
+    if not name:
         raise ValueError("empty user name")
-    # forbid path separators / sneaky names
-    if any(ch in user for ch in "/\\") or user in {".", ".."}:
+    if any(ch in name for ch in "/\\") or name in {".", ".."}:
         raise ValueError("invalid user name")
-    return paths.user_dir(user)
+    if name.startswith("_"):
+        raise ValueError("invalid user name")
+    return name
+
+
+def create_user(user: str):
+    return paths.user_dir(_validate_user_name(user))
+
+
+def delete_user(user: str):
+    """Erase a user's saved data from every save root that holds it.
+
+    A profile can exist in more than one root (the writable one plus any
+    legacy read-only location still on disk), so all of them are removed.
+    Returns ``(deleted, errors)``: the number of directories removed and a
+    list of human-readable failures, e.g. a read-only save root.
+    """
+    name = _validate_user_name(user)
+    deleted, errors = 0, []
+    for root in paths.all_known_roots():
+        directory = root / name
+        if not directory.is_dir():
+            continue
+        try:
+            shutil.rmtree(directory)
+            deleted += 1
+        except OSError as exc:
+            errors.append("{} ({})".format(
+                directory.parent, exc.strerror or exc))
+    return deleted, errors
 
 
 def user_exists(user: str) -> bool:

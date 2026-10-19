@@ -44,14 +44,33 @@ PANEL_EDGE = (120, 116, 150)
 START_GOLD_DEFAULT = 220
 START_LIVES_DEFAULT = 20
 WAVE_COUNTDOWN = 20.0      # seconds between waves (auto start)
-EARLY_CALL_BONUS = 2       # gold per second remaining when calling a wave early
+# Calling a wave early pays out for the build time you skip.  It is a flat
+# rate plus a share of the level's passive income, so the reward stays worth
+# taking at any gold_per_sec setting, and it is deliberately large enough that
+# racing the wave is a real alternative to finishing your build.
+EARLY_CALL_BONUS = 5       # gold per second of countdown skipped
+EARLY_CALL_INCOME_MULT = 1.5  # ... plus this much times the level's gold/sec
 SELL_RATIO = 0.7           # refund fraction of total invested
+DEFAULT_GOLD_PER_SEC = 1.0  # passive income when a level does not set one
+GOLD_PER_SEC_MAX = 25.0
 
 # --- Unit upgrades ---------------------------------------------------------
-# Defenders (player units) can be upgraded in place; these are the per-level
-# multipliers applied to their base stats.  Attackers scale per wave instead.
+# Defenders (player units) upgrade by *choosing a branch* each step rather than
+# a single linear ladder, so a unit ends up specialised in one direction.
+# These multipliers are what each branch applies.
 UNIT_MAX_LEVEL = 3
 UNIT_DAMAGE_GAIN = 1.6
 UNIT_RANGE_GAIN = 1.12
 UNIT_RATE_GAIN = 0.82
 UNIT_HP_GAIN = 1.25
+MULTI_DAMAGE_PENALTY = 0.92   # extra shots trade a little damage each
+
+# --- Base / hero -----------------------------------------------------------
+BASE_MAX_LEVEL = 4
+BASE_UPGRADE_COST = 180       # scales with the level already bought
+BASE_UPGRADE_COST_GAIN = 1.7
+BASE_HERO_DAMAGE_GAIN = 1.30  # each base level strengthens the race hero
+BASE_HERO_HP_GAIN = 1.35
+BASE_HERO_RANGE_GAIN = 1.08
+HERO_TRIGGER_RANGE = 150.0    # an attacker this close to the base calls the hero
+HERO_RESPAWN_COOLDOWN = 12.0  # seconds before a dead hero can be called again
