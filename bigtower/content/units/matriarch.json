@@ -1,0 +1,28 @@
+{
+  "id": "matriarch",
+  "name": "Hive Matriarch",
+  "role": "hero",
+  "sprite": {
+    "kind": "pack",
+    "tile": 284
+  },
+  "sprite_scale": 2.0,
+  "hp": 1200,
+  "cost": 0,
+  "speed": 36,
+  "movement": "chase",
+  "attack": "projectile",
+  "projectile": "dot",
+  "projectiles": 2,
+  "aggro": 300,
+  "range": 210,
+  "damage": 26,
+  "cooldown": 1.1,
+  "splash": 40,
+  "radius": 24,
+  "targets": "both",
+  "targeting": "nearest",
+  "sound": "gun",
+  "description": "Spawns when the base is breached and spits twin bolts at the nearest threat.",
+  "side": "defender"
+}

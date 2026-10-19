@@ -1,0 +1,26 @@
+{
+  "id": "treant",
+  "name": "Elder Treant",
+  "role": "hero",
+  "sprite": {
+    "kind": "pack",
+    "tile": 278
+  },
+  "sprite_scale": 2.1,
+  "hp": 1800,
+  "cost": 0,
+  "speed": 42,
+  "movement": "chase",
+  "attack": "melee",
+  "aggro": 260,
+  "range": 70,
+  "damage": 55,
+  "cooldown": 0.9,
+  "splash": 70,
+  "radius": 26,
+  "targets": "both",
+  "targeting": "strongest",
+  "sound": "boom",
+  "description": "The Woodlanders' guardian. Marches out when the base is breached.",
+  "side": "defender"
+}
