@@ -12,6 +12,20 @@ MAP_COLS = 20              # map area: CANVAS_W x MAP_ROWS*TILE  (1280 x 640)
 MAP_ROWS = 10
 HUD_H = CANVAS_H - MAP_ROWS * TILE   # 80px command bar at the bottom
 
+# --- Camera ----------------------------------------------------------------
+# The map viewport is the strip of canvas above the HUD.  Levels may be far
+# larger than it; the camera scrolls a map-space window over that strip.
+VIEW_W = CANVAS_W
+VIEW_H = CANVAS_H - HUD_H          # 640px of world visible at once
+CAMERA_SPEED = 1100.0              # keyboard panning, px/second
+CAMERA_EASE = 14.0                 # higher = snappier catch-up to the target
+CAMERA_EDGE = 24                   # edge-scroll band, px
+CAMERA_EDGE_SPEED = 900.0          # edge-scroll speed, px/second
+CAMERA_DRAG_THRESHOLD = 6          # px before a left-drag counts as a map drag
+MINIMAP_W = 208
+MINIMAP_H = 132
+MINIMAP_MARGIN = 10
+
 # --- Colors ----------------------------------------------------------------
 GRASS_GREEN = (111, 193, 82)
 DIRT_BROWN = (196, 132, 66)

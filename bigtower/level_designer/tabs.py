@@ -822,6 +822,8 @@ class RacesTab(FormTab):
 # levels
 # ===========================================================================
 CELL = 28
+MAX_CELL = 28              # never draw the map larger than this
+MIN_CELL = 4               # below this the map is too small to read
 MAP_RECT = pygame.Rect(264, 64, 20 * CELL, 10 * CELL)
 PALETTE_Y = MAP_RECT.bottom + 10
 AVAIL_RECT = pygame.Rect(264, PALETTE_Y + 92, 272, 200)
@@ -844,28 +846,49 @@ class MapCanvas:
         self._tile_cache = {}
         self.path = []
         self.path_ok = False
+        self.fits = True
         self._dirty = True
+        self._fit_cell()
 
     def set_grid(self, rows):
+        rows = list(rows or [])
+        if rows:                       # adopt the level's real dimensions
+            self.width = max(1, max(len(r) for r in rows))
+            self.height = max(1, len(rows))
         self.grid = []
         for y in range(self.height):
             row = list(rows[y]) if y < len(rows) else []
-            row = (row + ["g"] * self.width)[:self.width]
-            self.grid.append(row)
+            self.grid.append((row + ["g"] * self.width)[:self.width])
+        self._fit_cell()
         self._dirty = True
 
     def rows(self):
         return ["".join(r) for r in self.grid]
 
+    def _fit_cell(self):
+        """Scale the tile size so the whole grid stays inside the view rect.
+
+        Levels can be far larger than the designer's fixed map panel, so the
+        cells shrink instead of the panel growing over the unit lists.
+        """
+        cell = min(self.rect.width // max(1, self.width),
+                   self.rect.height // max(1, self.height))
+        cell = max(MIN_CELL, min(MAX_CELL, cell))
+        if cell != self.cell:
+            self.cell = cell
+            self._tile_cache = {}       # tiles are rasterised at cell size
+        self.fits = (self.width * self.cell <= self.rect.width
+                     and self.height * self.cell <= self.rect.height)
+
     def resize(self, width, height):
+        width, height = max(1, int(width)), max(1, int(height))
         new = [["g"] * width for _ in range(height)]
         for y in range(min(height, self.height)):
             for x in range(min(width, self.width)):
                 new[y][x] = self.grid[y][x]
         self.grid = new
         self.width, self.height = width, height
-        self.rect = pygame.Rect(self.rect.x, self.rect.y,
-                                width * self.cell, height * self.cell)
+        self._fit_cell()
         self._dirty = True
 
     def _cell_at(self, pos):

@@ -262,6 +262,217 @@ def main():
     check("shop stocks the level's units", len(scene.shop_units) >= 4,
           f"{len(scene.shop_units)} units")
 
+    # --- pause overlay: "Restart Level" rebuilds the same level --------------
+    from engine.game_scene import GameScene
+    from menus.pause_overlay import Scene as PauseOverlay
+    paused = GameScene(game, level_id)
+    game.scene = paused
+    paused.handle_event(key_event(pygame.K_ESCAPE))
+    check("escape opens the pause overlay",
+          isinstance(game.subscenes[-1] if game.subscenes else None,
+                     PauseOverlay))
+    paused.gold = 4242
+    paused.lives = 7
+    try:
+        game.subscenes[-1].restart()
+        restarted = game.scene
+        check("restart level does not crash and rebuilds the same level",
+              isinstance(restarted, GameScene)
+              and restarted is not paused
+              and restarted.level_id == level_id
+              and game.subscenes == [],
+              f"level={getattr(restarted, 'level_id', None)} "
+              f"overlays={len(game.subscenes)}")
+        check("restart level resets progress",
+              restarted.gold == restarted.level_def["gold"]
+              and restarted.lives == restarted.level_def["lives"]
+              and restarted.wave_number == 0
+              and restarted.state == "build")
+    except AttributeError as exc:
+        check("restart level does not crash and rebuilds the same level",
+              False, f"AttributeError: {exc}")
+    game.scene = scene          # restore for the rest of the battle tests
+
+    # ---------------------------------------------------------------- camera
+    # The shipped levels may be bigger than the viewport, so the camera has to
+    # behave on a map that genuinely does not fit.  A synthetic 3x3 mirror of
+    # the real grid gives us one without depending on shipped map sizes.
+    from engine.camera import Camera
+    from core import settings as _S
+    view = pygame.Rect(0, 0, _S.VIEW_W, _S.VIEW_H)
+    cam = Camera(view, (2560, 1280))
+    check("big map camera opens on the top-left", cam.offset == (0, 0),
+          str(cam.offset))
+    cam.pan_by(-999, -999)
+    cam.snap()
+    check("camera clamps at the top-left", cam.offset == (0, 0), str(cam.offset))
+    cam.pan_by(99999, 99999)
+    cam.snap()
+    check("camera clamps at the bottom-right",
+          cam.offset == (2560 - _S.VIEW_W, 1280 - _S.VIEW_H), str(cam.offset))
+    check("camera world/screen round-trips",
+          all(cam.screen_to_world(cam.world_to_screen(p)) == p
+              for p in ((0, 0), (123, 456), (2559, 1279))))
+    cam.scroll_to(0, 0)
+    check("camera culls what is off-screen",
+          cam.is_visible((10, 10)) and not cam.is_visible((2500, 1200)))
+    tiny = Camera(view, (640, 320))
+    check("a map smaller than the viewport is centred", tiny.offset == (320, 160),
+          str(tiny.offset))
+    cam.scroll_to(0, 0)
+    cam.pan_by(800, 600)
+    for _ in range(200):
+        cam.update(0.016)
+    check("camera eases onto its target", cam.offset == (800, 600),
+          str(cam.offset))
+
+    big_def = dict(scene.level_def)
+    big_cols, big_rows_n = 60, 30
+    cells = [["g"] * big_cols for _ in range(big_rows_n)]
+    bands = list(range(2, big_rows_n - 3, 4))
+    for i, y in enumerate(bands):
+        for x in range(1, big_cols - 1):
+            cells[y][x] = "."
+        if i + 1 < len(bands):
+            link_x = big_cols - 3 if i % 2 == 0 else 2
+            for yy in range(y, bands[i + 1] + 1):
+                cells[yy][link_x] = "."
+    cells[bands[0]][1] = "S"
+    cells[bands[-1]][big_cols - 2] = "B"
+    big_def["id"] = "big_camera_test"
+    big_def["grid"] = ["".join(r) for r in cells]
+    content.levels[big_def["id"]] = big_def
+    big = GameScene(game, big_def["id"])
+    game.scene = big
+    check("a map larger than the viewport is scrollable",
+          big.camera.scrollable and big.level.cols * _S.TILE > _S.VIEW_W,
+          f"{big.level.cols}x{big.level.rows_n}")
+    game.on_draw()
+    check("the world is drawn inside the viewport only",
+          game.canvas.get_at((5, _S.CANVAS_H - 4))[:3] == _S.HUD_BG)
+    big.camera.scroll_to(0, 0)
+    spot = None
+    for cy in range(big.level.rows_n):
+        for cx in range(big.level.cols):
+            if (big.level.is_buildable(cx, cy)
+                    and big.camera.is_visible(big.level.cell_center((cx, cy)))):
+                spot = (cx, cy)
+                break
+        if spot:
+            break
+    big.selected_shop = big.shop_units[0]
+    big.gold = 5000
+    big._click(big.camera.world_to_screen(big.level.cell_center(spot)))
+    check("a screen click places a tower in the right map cell",
+          spot in big.towers_by_cell, f"cell={spot}")
+    big._click((big.minimap_rect.centerx, big.minimap_rect.centery))
+    check("clicking the minimap jumps the camera", big.camera.offset != (0, 0),
+          str(big.camera.offset))
+
+    # --- units must ride the map, not fight it ------------------------------
+    # The world renderer and the camera must agree on one convention:
+    # screen = world - camera_offset.  A sign slip here is invisible to a
+    # click/camera test but makes every unit slide the wrong way across the map.
+    import numpy as _np
+    from engine.units import Unit as _Unit
+
+    def _anchor(utype, world, offset):
+        probe = pygame.Surface((_S.VIEW_W, _S.VIEW_H))
+        probe.fill((1, 2, 3))
+        u = _Unit(utype, world)
+        u.draw(probe, show_hp=False, force=True, offset=offset)
+        arr = pygame.surfarray.array3d(probe)          # (w, h, 3)
+        lit = _np.any(arr != _np.array((1, 2, 3), dtype=arr.dtype), axis=2)
+        xs, ys = _np.nonzero(lit)
+        return (float(xs.mean()), float(ys.mean()))
+
+    mid = (10, 5)
+    while not big.level.is_buildable(*mid):
+        mid = (mid[0] + 1, mid[1])
+    anchor_world = big.level.cell_center(mid)
+    p0 = _anchor(big.shop_units[0], anchor_world, (0, 0))
+    p1 = _anchor(big.shop_units[0], anchor_world, (60, 40))
+    check("a unit shifts opposite the camera scroll, like the terrain",
+          abs((p1[0] - p0[0]) + 60) < 1.0 and abs((p1[1] - p0[1]) + 40) < 1.0,
+          f"shift=({p1[0]-p0[0]:+.1f}, {p1[1]-p0[1]:+.1f}) for scroll +60/+40")
+
+    big.selected_shop = big.shop_units[0]
+    big.gold = 5000
+    big._try_place(mid)
+    tower = big.towers_by_cell[mid]
+    big.camera.scroll_to(200, 150)
+    expect = big.camera.world_to_screen(tower.pos)
+    big.defenders.remove(tower)
+    game.on_draw()
+    bare = game.canvas.copy()
+    big.defenders.append(tower)
+    game.on_draw()
+    a = pygame.surfarray.array3d(game.canvas)
+    b = pygame.surfarray.array3d(bare)
+    keep = _np.zeros(a.shape[:2], dtype=bool)          # keep[x, y]
+    keep[big.view_rect.x:big.view_rect.right,
+         big.view_rect.y:big.view_rect.bottom] = True
+    keep[big.minimap_rect.x - 6:, big.minimap_rect.y - 6:
+         big.minimap_rect.bottom + 34] = False
+    xs, ys = _np.nonzero(_np.any(a != b, axis=2) & keep)
+    aligned = (len(xs) > 0
+               and abs(xs.mean() - expect[0]) < 14
+               and abs(ys.mean() - expect[1]) < 14)
+    check("a placed tower renders on the tile the camera maps it to", aligned,
+          f"expected~{expect} rendered~({xs.mean():.0f}, {ys.mean():.0f})"
+          if len(xs) else "not rendered")
+
+    # --- edge scrolling must not fight the shop bar -------------------------
+    def _scroll_at(pos):
+        big.camera.scroll_to(600, 300)
+        big.mouse_screen = pos
+        big.game.delta_time = 1 / 60.0
+        before = big.camera.offset
+        big.handle_keypress()
+        big.camera.snap()
+        return (big.camera.offset[0] - before[0],
+                big.camera.offset[1] - before[1])
+
+    card = big.shop_buttons[0][0]
+    above = (card.centerx, _S.VIEW_H - 12)     # just above the shop bar
+    check("reaching for a shop card does not scroll the map",
+          _scroll_at(above) == (0, 0) and _scroll_at(card.center) == (0, 0),
+          f"above={_scroll_at(above)} on-card={_scroll_at(card.center)}")
+    check("panning down only happens at the bottom edge of the screen",
+          _scroll_at((300, _S.CANVAS_H - 2))[1] > 0
+          and _scroll_at((_S.VIEW_W - 4, _S.VIEW_H // 2))[1] == 0)
+    check("top and side edges still scroll the camera",
+          _scroll_at((300, 4))[1] < 0
+          and _scroll_at((4, 300))[0] < 0
+          and _scroll_at((_S.VIEW_W - 4, 300))[0] > 0)
+    check("the middle of the map does not scroll",
+          _scroll_at((_S.VIEW_W // 2, _S.VIEW_H // 2)) == (0, 0))
+    big.camera.scroll_to(0, 0)
+
+    # --- the shop previews a unit's stats before it is ever deployed ---------
+    from engine import stats_panel
+    shop_type = big.shop_units[0]
+    check("every shop unit can be previewed",
+          all(stats_panel.stat_rows(u) for u in big.shop_units),
+          f"{len(big.shop_units)} units")
+    base = stats_panel.scaled_stats(shop_type, 1)
+    upg = stats_panel.scaled_stats(shop_type, 2)
+    check("shop stats show what an upgrade improves",
+          upg["damage"] > base["damage"] and upg["hp"] > base["hp"]
+          and upg["rate"] > base["rate"],
+          f"dmg {base['damage']:.1f}->{upg['damage']:.1f} "
+          f"hp {base['hp']}->{upg['hp']}")
+    rows_preview = stats_panel.stat_rows(shop_type)
+    check("shop stat rows carry an upgrade preview",
+          any(row[2] for row in rows_preview) and
+          any(row[0] == "DPS" for row in rows_preview))
+    big._hover_shop = shop_type
+    big.mouse_screen = (200, 300)
+    game.on_draw()
+    check("hovering a shop card draws its stat tooltip", True)
+    del content.levels[big_def["id"]]
+    game.scene = scene          # restore for the rest of the battle tests
+
     # --- a killed unit plays a short death animation then vanishes ----------
     death_spec = normalise_sprite({"kind": "sprites", "image": None, "animations": {
         "death": {"path": sheet_path, "frame_w": 32, "frame_h": 32,
@@ -466,6 +677,34 @@ def main():
     check("designer saves waves",
           bool(saved_level["waves"]) and bool(saved_level["waves"][0]))
     check("designer keeps the level reachable", level_tab.map.path_ok)
+
+    # --- a map bigger than the designer's panel must survive a round trip -----
+    mcanvas = level_tab.map
+    panel = pygame.Rect(mcanvas.rect)
+    big_rows = ["g" * 40 for _ in range(20)]
+    big_rows = [list(r) for r in big_rows]
+    big_rows[1][1] = "S"
+    big_rows[18][38] = "B"
+    big_rows = ["".join(r) for r in big_rows]
+    mcanvas.set_grid(big_rows)
+    check("designer adopts an oversized map's dimensions",
+          mcanvas.width == 40 and mcanvas.height == 20,
+          f"{mcanvas.width}x{mcanvas.height}")
+    check("designer scales the tiles instead of overflowing its panel",
+          mcanvas.fits and mcanvas.width * mcanvas.cell <= panel.width
+          and mcanvas.height * mcanvas.cell <= panel.height,
+          f"cell={mcanvas.cell} panel={panel.size}")
+    check("designer keeps every cell of an oversized map",
+          len(mcanvas.rows()) == 20
+          and all(len(r) == 40 for r in mcanvas.rows())
+          and mcanvas.rows()[1][1] == "S"
+          and mcanvas.rows()[18][38] == "B")
+    level_tab.save()
+    again = ContentDB(root=design_root).level(level_tab.current["id"])
+    check("an oversized map survives save and reload",
+          len(again["grid"]) == 20 and len(again["grid"][0]) == 40
+          and again["grid"][1][1] == "S" and again["grid"][18][38] == "B",
+          f"{len(again['grid'])}x{len(again['grid'][0])}")
 
     # ------------------------------------------------- sprite editor widgets
     from level_designer import widgets as W

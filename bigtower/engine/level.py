@@ -214,19 +214,57 @@ class Level:
             self._anim_cells.append((px, py, frames, art.fps(spec),
                                      art.loops(spec), offset))
 
-    def draw(self, canvas):
-        canvas.blit(self.terrain, (0, 0))
+    def draw(self, canvas, offset=(0, 0), view_rect=None):
+        """Draw the terrain, its animated cells and the base turret.
+
+        ``offset`` is the camera offset in pixels: a map point ``w`` is drawn at
+        ``w - offset + view_rect.topleft``.  ``view_rect`` is the screen region
+        being drawn into; when given, only what falls inside it is blitted, which
+        keeps large maps cheap.
+        """
+        ox, oy = offset
+        vx, vy = (view_rect.x, view_rect.y) if view_rect is not None else (0, 0)
+
+        def to_screen(x, y):
+            return (int(x - ox + vx), int(y - oy + vy))
+
+        self._blit_terrain(canvas, ox, oy, view_rect, vx, vy)
         if self._anim_cells:
             now = pygame.time.get_ticks() / 1000.0
-            for px, py, frames, spec_fps, loop, offset in self._anim_cells:
-                i = int((now + offset) * spec_fps)
+            for px, py, frames, spec_fps, loop, phase in self._anim_cells:
+                if view_rect is not None and not (
+                        px <= ox + view_rect.width
+                        and px + S.TILE >= ox
+                        and py <= oy + view_rect.height
+                        and py + S.TILE >= oy):
+                    continue
+                i = int((now + phase) * spec_fps)
                 idx = i % len(frames) if loop else min(len(frames) - 1, i)
-                canvas.blit(frames[idx], (px, py))
+                canvas.blit(frames[idx], to_screen(px, py))
+
         cx, cy = self.cell_center(self.base_cell)
         if len(self.path_cells) >= 2:
             px, py = self.cell_center(self.path_cells[-2])
         else:
             px, py = cx, cy - 1
+        if view_rect is not None and not (
+                cx <= ox + view_rect.width and cx + S.TILE >= ox
+                and cy <= oy + view_rect.height and cy + S.TILE >= oy):
+            return
         angle = art.angle_between((cx, cy), (px, py))
         base_img = art.rot(art.tile(TILE_BASE_TURRET), angle)
-        canvas.blit(base_img, base_img.get_rect(center=(cx, cy)))
+        canvas.blit(base_img, base_img.get_rect(center=to_screen(cx, cy)))
+
+    def _blit_terrain(self, canvas, ox, oy, view_rect, vx, vy):
+        if view_rect is None:
+            canvas.blit(self.terrain, (int(ox - vx), int(oy - vy)))
+            return
+        # the map-space band that lands inside the viewport
+        left = max(0, int(ox))
+        top = max(0, int(oy))
+        right = min(self.terrain.get_width(), int(ox + view_rect.width))
+        bottom = min(self.terrain.get_height(), int(oy + view_rect.height))
+        if right <= left or bottom <= top:
+            return          # map is entirely off-screen
+        canvas.blit(self.terrain, (left - ox + vx, top - oy + vy),
+                    pygame.Rect(left, top, right - left, bottom - top))

@@ -64,12 +64,13 @@ class Projectile:
                 self.target.take_hit(self.damage)
                 effects.append(("hit", list(self.pos)))
 
-    def draw(self, canvas):
+    def draw(self, canvas, offset=(0, 0)):
         if self.dead:
             return
         angle = art.angle_between(self.pos, self.last_target_pos)
         img = art.rot(self.sprite, angle)
-        canvas.blit(img, img.get_rect(center=self.pos))
+        canvas.blit(img, img.get_rect(center=(self.pos[0] - offset[0],
+                                              self.pos[1] - offset[1])))
 
 
 class Effects:
@@ -90,15 +91,16 @@ class Effects:
         self.items = [i for i in self.items
                       if i["t"] < self.LIFE.get(i["kind"], 0.35)]
 
-    def draw(self, canvas):
+    def draw(self, canvas, offset=(0, 0)):
         for item in self.items:
             life = self.LIFE.get(item["kind"], 0.35)
             frac = item["t"] / life
             if item["kind"] == "hit":
                 radius = int(4 + 14 * frac)
                 alpha = max(0, int(200 * (1 - frac)))
-                pygame.draw.circle(canvas, (255, 240, 190, alpha), item["pos"],
-                                   radius, 2)
+                pygame.draw.circle(canvas, (255, 240, 190, alpha),
+                                   (item["pos"][0] - offset[0],
+                                    item["pos"][1] - offset[1]), radius, 2)
                 continue
             radius = int(8 + 40 * frac)
             alpha = max(0, int(180 * (1 - frac)))
@@ -107,4 +109,5 @@ class Effects:
                                (radius, radius), radius, 3)
             pygame.draw.circle(ring, (255, 220, 120, alpha // 2),
                                (radius, radius), max(2, radius // 2))
-            canvas.blit(ring, (item["pos"][0] - radius, item["pos"][1] - radius))
+            canvas.blit(ring, (int(item["pos"][0] - offset[0]) - radius,
+                               int(item["pos"][1] - offset[1]) - radius))

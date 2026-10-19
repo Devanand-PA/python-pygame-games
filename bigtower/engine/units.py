@@ -368,32 +368,35 @@ class Unit:
             return True
         return False
 
-    def draw(self, canvas, show_hp=True, force=False):
+    def draw(self, canvas, show_hp=True, force=False, offset=(0, 0)):
+        """Draw at ``pos - offset``: ``offset`` is the camera scroll, matching
+        :meth:`engine.camera.Camera.world_to_screen`."""
         if not self.alive and not force:
             return
         img = art.rot(self._current_frame(), self.heading)
-        canvas.blit(img, img.get_rect(center=self.pos))
+        canvas.blit(img, img.get_rect(center=(self.pos[0] - offset[0],
+                                              self.pos[1] - offset[1])))
         if show_hp and self.hp < self.max_hp:
-            self._draw_hp_bar(canvas)
+            self._draw_hp_bar(canvas, offset)
 
-    def _draw_hp_bar(self, canvas):
+    def _draw_hp_bar(self, canvas, offset=(0, 0)):
         w = max(22, int(self.radius * 2))
         frac = max(0.0, self.hp / self.max_hp)
-        x = int(self.pos[0] - w // 2)
-        y = int(self.pos[1] - self.radius - 9)
+        x = int(self.pos[0] - offset[0] - w // 2)
+        y = int(self.pos[1] - offset[1] - self.radius - 9)
         pygame.draw.rect(canvas, (40, 40, 40), (x, y, w, 5), border_radius=2)
         color = (120, 220, 120) if frac > 0.5 else (
             (240, 200, 60) if frac > 0.25 else (230, 80, 80))
         pygame.draw.rect(canvas, color, (x, y, int(w * frac), 5), border_radius=2)
 
-    def draw_range(self, canvas, color=(255, 255, 255)):
+    def draw_range(self, canvas, color=(255, 255, 255), offset=(0, 0)):
         rng = int(self.range)
         ring = pygame.Surface((rng * 2 + 4, rng * 2 + 4), pygame.SRCALPHA)
         center = (ring.get_width() // 2, ring.get_height() // 2)
         pygame.draw.circle(ring, tuple(color) + (36,), center, rng)
         pygame.draw.circle(ring, tuple(color) + (120,), center, rng, 2)
-        canvas.blit(ring, (self.pos[0] - ring.get_width() // 2,
-                           self.pos[1] - ring.get_height() // 2))
+        canvas.blit(ring, (int(self.pos[0] - offset[0] - ring.get_width() // 2),
+                           int(self.pos[1] - offset[1] - ring.get_height() // 2)))
 
 
 def spawn_attacker(utype, level, spawn_pos, base_pos, wave_number, race_tint=None):

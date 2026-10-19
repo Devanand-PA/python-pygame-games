@@ -11,6 +11,8 @@ from core import settings as S
 from core.content import get_content
 from core.scene import Scene
 from engine import art
+from engine import stats_panel
+from engine.camera import Camera
 from engine.level import Level
 from engine.projectiles import Effects, Projectile
 from engine.units import Unit
@@ -53,7 +55,15 @@ class GameScene(Scene):
         self.shop_units = self.content.level_defenders(self.level_def)
         self.selected_shop = None            # UnitType while placing
         self.selected_unit = None            # Unit while inspecting
-        self.mouse_pos = (S.CANVAS_W // 2, S.CANVAS_H // 2)
+        self.mouse_pos = (S.CANVAS_W // 2, S.CANVAS_H // 2)   # map space
+        self.mouse_screen = (S.CANVAS_W // 2, S.CANVAS_H // 2)  # canvas space
+
+        # --- camera ---------------------------------------------------------
+        self.view_rect = pygame.Rect(0, 0, S.VIEW_W, S.VIEW_H)
+        self.camera = Camera(self.view_rect, self.level.pixel_size)
+        self._drag = None                    # map point grabbed, while panning
+        self._drag_moved = False
+        self._hover_shop = None              # UnitType under the cursor in the HUD
 
         self._make_hud()
 
@@ -73,6 +83,10 @@ class GameScene(Scene):
         self.speed_btn = pygame.Rect(S.CANVAS_W - 150, self.hud_rect.y + 44, 66, 28)
         self.pause_btn = pygame.Rect(S.CANVAS_W - 78, self.hud_rect.y + 44, 66, 28)
         self.info_panel = pygame.Rect(S.CANVAS_W - 336, self.hud_rect.y - 140, 324, 134)
+        # minimap lives in the top-right corner of the viewport
+        self.minimap_rect = pygame.Rect(
+            S.CANVAS_W - S.MINIMAP_W - S.MINIMAP_MARGIN, S.MINIMAP_MARGIN,
+            S.MINIMAP_W, S.MINIMAP_H)
 
     # ================================================================= waves
     def start_wave(self, early=False):
@@ -224,7 +238,11 @@ class GameScene(Scene):
     # ================================================================= events
     def handle_event(self, event):
         if event.type == pygame.MOUSEMOTION:
-            self.mouse_pos = event.pos
+            self._on_mouse_move(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button in (1, 2):
+                self._drag = self.camera.screen_to_world(event.pos)
+                self._drag_moved = False
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self.selected_shop or self.selected_unit:
@@ -236,16 +254,114 @@ class GameScene(Scene):
             elif event.key == pygame.K_SPACE and self.state == "build":
                 self.first_wave_pending = False
                 self.start_wave(early=True)
+            elif event.key in (pygame.K_b, pygame.K_v) and self.selected_unit is None:
+                # snap the view to the base (B) or the spawn (V)
+                target = (self.level.base_cell if event.key == pygame.K_b
+                          else self.level.spawn_cell)
+                self.camera.center_on(self.level.cell_center(target))
+                self.camera.snap()
             elif pygame.K_1 <= event.key <= pygame.K_9:
                 idx = event.key - pygame.K_1
                 if idx < len(self.shop_units):
                     self._select_shop(self.shop_units[idx])
+        elif event.type == pygame.MOUSEWHEEL:
+            self.camera.pan_by(0, -event.y * 3 * S.TILE)
+            self.camera.snap()
         elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1:
-                self._click(event.pos)
+            if event.button in (1, 2):
+                dragged, self._drag = self._drag_moved, None
+                self._drag_moved = False
+                if event.button == 1 and not dragged:
+                    self._click(event.pos)
+                elif event.button == 2:
+                    self.camera.snap()
             elif event.button == 3:
                 self.selected_shop = None
                 self.selected_unit = None
+
+    def _on_mouse_move(self, screen_pos):
+        self.mouse_screen = tuple(screen_pos)
+        self.mouse_pos = self.camera.screen_to_world(screen_pos)
+        self._hover_shop = None
+        for rect, utype in self.shop_buttons:
+            if rect.collidepoint(screen_pos):
+                self._hover_shop = utype
+                break
+        if self._drag is None:
+            return
+        grab = self._drag
+        world = self.camera.screen_to_world(screen_pos)
+        if (abs(world[0] - grab[0]) >= S.CAMERA_DRAG_THRESHOLD
+                or abs(world[1] - grab[1]) >= S.CAMERA_DRAG_THRESHOLD):
+            self._drag_moved = True
+        if self._drag_moved:
+            self.camera.drag_to(world, grab)
+            self.mouse_pos = self.camera.screen_to_world(screen_pos)
+
+    # ------------------------------------------------- continuous camera keys
+    def handle_keypress(self):
+        """Called every frame by the game loop: held keys drive the camera."""
+        if self.state in ("won", "lost"):
+            return
+        dt = self.game.delta_time
+        if dt <= 0.0:
+            return
+        keys = pygame.key.get_pressed()
+        dx = (1 if keys[pygame.K_d] or keys[pygame.K_RIGHT] else 0) - \
+             (1 if keys[pygame.K_a] or keys[pygame.K_LEFT] else 0)
+        dy = (1 if keys[pygame.K_s] or keys[pygame.K_DOWN] else 0) - \
+             (1 if keys[pygame.K_w] or keys[pygame.K_UP] else 0)
+        if dx or dy:
+            norm = (dx * dx + dy * dy) ** 0.5
+            self.camera.pan_screen(dx / norm, dy / norm, dt)
+            return                       # held keys cancel edge scrolling
+        if self._cursor_over_view():
+            self._edge_scroll(dt)
+        elif self._cursor_at_screen_bottom():
+            self.camera.pan_by(0, S.CAMERA_EDGE_SPEED * dt)
+
+    def _cursor_over_view(self):
+        pos = self.mouse_screen
+        return (self.view_rect.collidepoint(pos)
+                and not self.minimap_rect.collidepoint(pos)
+                and not (self.info_panel.collidepoint(pos)
+                         and self.selected_unit is not None))
+
+    def _cursor_at_screen_bottom(self):
+        """True in the strip along the very bottom of the screen that is clear
+        of the HUD controls.
+
+        Panning *down* deliberately has no band above the shop bar: that band
+        used to sit right on top of it, so reaching for a card to deploy scrolled
+        the map instead of just selecting a unit.  Down-panning by mouse is now
+        confined to the bottom edge of the window (see ``_edge_scroll``); WASD,
+        dragging, the wheel and the minimap are unaffected.
+        """
+        pos = self.mouse_screen
+        if pos[1] < S.CANVAS_H - S.CAMERA_EDGE:
+            return False
+        blocked = [rect for rect, _u in self.shop_buttons]
+        blocked += [self.wave_btn, self.speed_btn, self.pause_btn]
+        return not any(rect.inflate(4, 4).collidepoint(pos) for rect in blocked)
+
+    def _edge_scroll(self, dt):
+        """Scroll when the cursor rests against an edge of the viewport.
+
+        Left/right/top only -- the bottom edge is handled by
+        :meth:`_cursor_at_screen_bottom` so the shop bar is never a pan trigger.
+        """
+        pos = self.mouse_screen
+        edge = S.CAMERA_EDGE
+        dx = dy = 0.0
+        if pos[0] < self.view_rect.x + edge:
+            dx = -1.0
+        elif pos[0] > self.view_rect.right - edge:
+            dx = 1.0
+        if pos[1] < self.view_rect.y + edge:
+            dy = -1.0
+        if dx or dy:
+            self.camera.pan_by(dx * S.CAMERA_EDGE_SPEED * dt,
+                               dy * S.CAMERA_EDGE_SPEED * dt)
 
     def _select_shop(self, utype):
         if self.gold < utype.cost:
@@ -278,14 +394,21 @@ class GameScene(Scene):
         if self.info_panel.collidepoint(pos) and self.selected_unit is not None:
             self._panel_click(pos)
             return
+        if self.minimap_rect.collidepoint(pos):
+            world = self.camera.minimap_click(self.minimap_rect, pos)
+            if world is not None:
+                self.camera.center_on(world)
+                self.camera.snap()
+            return
 
-        unit = self._unit_at(pos)
+        world = self.camera.screen_to_world(pos)
+        unit = self._unit_at(world)
         if unit is not None:
             self.selected_unit = unit
             self.selected_shop = None
             return
         if self.selected_shop is not None:
-            self._try_place(self.level.cell_of(pos))
+            self._try_place(self.level.cell_of(world))
             return
         self.selected_unit = None
 
@@ -376,44 +499,148 @@ class GameScene(Scene):
 
     # ================================================================= draw
     def on_draw(self):
-        self.level.draw(self.game.canvas)
-        if self.selected_unit is not None:
-            self.selected_unit.draw_range(self.game.canvas)
-        for defender in self.defenders:
-            defender.draw(self.game.canvas)
-        for attacker in self.attackers:
-            attacker.draw(self.game.canvas)
-        for proj in self.projectiles:
-            proj.draw(self.game.canvas)
-        for unit, _left in self.dying_units:
-            unit.draw(self.game.canvas, show_hp=False, force=True)
-        self.effects.draw(self.game.canvas)
-        if self.selected_shop is not None:
-            self._draw_ghost()
+        self.camera.update(self.game.delta_time)
+        self._draw_world()
         self._draw_hud()
         if self.selected_unit is not None:
             self._draw_info_panel()
+        self._draw_minimap()
+        self._draw_shop_tooltip()
         if self.state in ("won", "lost"):
             self._draw_end_screen()
 
+    def _draw_world(self):
+        """Draw the map and everything on it, offset by the camera.
+
+        The world is painted straight onto the canvas but only inside the
+        viewport, so nothing can bleed into the HUD and nothing off-screen is
+        blitted.
+        """
+        canvas = self.game.canvas
+        view = self.view_rect
+        offset = self.camera.offset
+
+        pygame.draw.rect(canvas, (8, 8, 12), view)      # void beyond the map
+        self.level.draw(canvas, offset, view)
+
+        cam = self.camera
+        if self.selected_unit is not None:
+            self.selected_unit.draw_range(canvas, offset=offset)
+        for defender in self.defenders:
+            if cam.is_visible(defender.pos, S.TILE):
+                defender.draw(canvas, offset=offset)
+        for attacker in self.attackers:
+            if cam.is_visible(attacker.pos, S.TILE):
+                attacker.draw(canvas, offset=offset)
+        for proj in self.projectiles:
+            if cam.is_visible(proj.pos, 24):
+                proj.draw(canvas, offset=offset)
+        for unit, _left in self.dying_units:
+            if cam.is_visible(unit.pos, S.TILE):
+                unit.draw(canvas, show_hp=False, force=True, offset=offset)
+        self.effects.draw(canvas, offset=offset)
+        if self.selected_shop is not None:
+            self._draw_ghost()
+
+    # ---------------------------------------------------------------- minimap
+    def _draw_minimap(self):
+        """A scaled-down overview; click it to jump the camera."""
+        if not self.camera.scrollable:
+            return
+        canvas = self.game.canvas
+        box = self.minimap_rect
+        mw, mh = self.level.pixel_size
+        pygame.draw.rect(canvas, (14, 14, 22), box, border_radius=6)
+        # scaled-down copy of the terrain, cached per (map size, colour depth)
+        thumb = self._minimap_thumb()
+        if thumb is not None:
+            canvas.blit(thumb, (box.x + 1, box.y + 1),
+                        pygame.Rect(0, 0, box.width - 2, box.height - 2))
+        pygame.draw.rect(canvas, S.PANEL_EDGE, box, 2, border_radius=6)
+
+        # spawn and base markers
+        for cell, color in ((self.level.spawn_cell, (110, 230, 140)),
+                            (self.level.base_cell, (120, 170, 255))):
+            cx = box.x + 2 + (self.level.cell_center(cell)[0] / mw) * (box.width - 4)
+            cy = box.y + 2 + (self.level.cell_center(cell)[1] / mh) * (box.height - 4)
+            pygame.draw.circle(canvas, color, (int(cx), int(cy)), 3)
+
+        # defenders as tiny dots, so the player can find their towers
+        for defender in self.defenders:
+            px, py = defender.pos
+            canvas.fill((255, 220, 120),
+                        (int(box.x + 2 + px / mw * (box.width - 4)),
+                         int(box.y + 2 + py / mh * (box.height - 4)), 2, 2))
+
+        view_box = self.camera.minimap_view_rect(
+            pygame.Rect(box.x + 2, box.y + 2, box.width - 4, box.height - 4))
+        pygame.draw.rect(canvas, (250, 250, 255), view_box, 2, border_radius=3)
+
+        hint = self.game.fonts["small"].render(
+            "drag/WASD \u00b7 B base \u00b7 V spawn",
+            True, (196, 196, 216))
+        hint_rect = hint.get_rect(midright=(box.right, box.bottom + 6))
+        backing = hint_rect.inflate(8, 4)
+        pygame.draw.rect(canvas, (10, 10, 16), backing, border_radius=4)
+        canvas.blit(hint, hint_rect)
+
+    def _minimap_thumb(self):
+        size = (self.minimap_rect.width - 2, self.minimap_rect.height - 2)
+        cached = getattr(self, "_thumb_cache", None)
+        if cached is not None and cached[0] == size:
+            return cached[1]
+        thumb = pygame.transform.smoothscale(self.level.terrain, size)
+        self._thumb_cache = (size, thumb)
+        return thumb
+
+    # --------------------------------------------------------- shop tooltip
+    def _draw_shop_tooltip(self):
+        """Show the full stat card for the shop unit under the cursor."""
+        utype = self._hover_shop
+        if utype is None or self.state in ("won", "lost"):
+            return
+        fonts = self.game.fonts
+        width = 320
+        height = stats_panel.panel_height(utype)
+        rect = pygame.Rect(0, 0, width, height)
+        rect.bottom = self.hud_rect.y - 8          # sit just above the HUD
+        rect.left = min(max(S.MINIMAP_MARGIN, self.mouse_screen[0] - width // 2),
+                        S.CANVAS_W - width - S.MINIMAP_MARGIN)
+        rect.top = max(4, rect.bottom - height)
+        stats_panel.draw_tooltip(
+            self.game.canvas, rect, utype, fonts, race_tint=self.race_tint,
+            affordable=self.gold >= utype.cost,
+            hotkey=self._hotkey_for(utype))
+
+    def _hotkey_for(self, utype):
+        for idx, (_rect, candidate) in enumerate(self.shop_buttons):
+            if candidate is utype and idx < 9:
+                return idx + 1
+        return None
+
     def _draw_ghost(self):
         utype = self.selected_shop
+        if not self.view_rect.collidepoint(self.mouse_screen):
+            return
         cell = self.level.cell_of(self.mouse_pos)
         center = self.level.cell_center(cell)
         valid = (self.level.is_buildable(*cell)
                  and cell not in self.towers_by_cell
                  and self.gold >= utype.cost)
-        ghost = pygame.Surface((S.CANVAS_W, S.CANVAS_H), pygame.SRCALPHA)
+        screen = self.camera.world_to_screen(center)
+        view = self.view_rect
+        ghost = pygame.Surface((view.width, view.height), pygame.SRCALPHA)
+        local = (screen[0] - view.x, screen[1] - view.y)
         color = (120, 220, 120, 60) if valid else (230, 80, 80, 60)
-        pygame.draw.circle(ghost, color, center, int(utype.range))
-        pygame.draw.circle(ghost, (255, 255, 255, 110), center,
+        pygame.draw.circle(ghost, color, local, int(utype.range))
+        pygame.draw.circle(ghost, (255, 255, 255, 110), local,
                            int(utype.range), 2)
         size = int(S.TILE * utype.sprite_scale)
         sprite = art.sprite(utype.sprite, size, self.race_tint)
         if not valid:
             sprite = art.sprite_alpha(sprite, 150)
-        ghost.blit(sprite, sprite.get_rect(center=center))
-        self.game.canvas.blit(ghost, (0, 0))
+        ghost.blit(sprite, sprite.get_rect(center=local))
+        self.game.canvas.blit(ghost, (view.x, view.y))
 
     # ---------------------------------------------------------------- HUD
     def _draw_hud(self):
@@ -519,7 +746,7 @@ class GameScene(Scene):
     # -------------------------------------------------------------- end screen
     def _end_box(self):
         box = pygame.Rect(0, 0, 540, 320)
-        box.center = (S.CANVAS_W // 2, (self.level.rows_n * S.TILE) // 2)
+        box.center = self.view_rect.center
         return box
 
     def _draw_end_screen(self):

@@ -31,7 +31,7 @@ class Scene(Scene):
     def restart(self):
         from engine.game_scene import GameScene
         self.game.subscenes.clear()
-        self.game.scene = GameScene(self.game, self.game_scene.level_index)
+        self.game.scene = GameScene(self.game, self.game_scene.level_id)
 
     def quit_to_career(self):
         self.game.subscenes.clear()
