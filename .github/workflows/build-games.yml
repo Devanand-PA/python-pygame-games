@@ -1,13 +1,13 @@
 name: Build Games
 
-# Every push to main rebuilds BOTH games from scratch and republishes them to
-# their rolling release tags.
+# Every push to main rebuilds BOTH games from scratch and republishes them into
+# a single rolling "python-pygame-games-latest" release.
 #
 # The two games are built simultaneously: `build-paddle` and `build-bigtower`
 # declare no `needs:` on each other, so all six runners (2 games x 3 operating
 # systems) are scheduled at once instead of one game waiting for the other.
-# Each game publishes from its own release job that depends only on its own
-# builds, so a paddle failure never delays a bigtower release.
+# Only the final `publish-release` step is serialised, since both games have to
+# land in the same release.
 on:
   push:
     branches:
@@ -113,66 +113,64 @@ jobs:
           path: bigtower/dist/*.zip
           if-no-files-found: error
 
-  release-paddle:
-    name: Publish Paddle release
-    needs: build-paddle
+  publish-release:
+    name: Publish combined release
+    # Waits for both games so the release always carries the full set of assets.
+    # The builds themselves still run simultaneously -- only the single publish
+    # step is serialised.
+    needs: [build-paddle, build-bigtower]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download all Paddle build artifacts
+      - name: Download Paddle build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: paddle-*
+          # `pattern`, not `name`: `name` selects a single artifact by exact
+          # name and takes precedence over `pattern`, so `name: paddle-*`
+          # searches for an artifact literally called "paddle-*" and fails.
+          pattern: paddle-*
           path: dist
           merge-multiple: true
+
+      - name: Download Big Tower build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # See the note above: wildcards go in `pattern`.
+          pattern: bigtower-*
+          path: dist
+          merge-multiple: true
+
+      - name: List downloaded archives
+        run: ls -lh dist/
 
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: paddle-latest
-          name: "Paddle — latest build"
+          tag_name: python-pygame-games-latest
+          name: "python-pygame-games — latest build"
           body: |
-            Automatic build of **Paddle** from commit `${{ github.sha }}`
-            (branch `${{ github.ref_name }}`).
+            Automatic build of both games from commit `${{ github.sha }}`
+            (branch `${{ github.ref_name }}`), built for Linux, Windows and macOS.
 
-            Every archive contains a single self-contained executable plus an
-            empty `saves/` folder where the game stores your progress.
+            Download the archive whose name matches your platform:
 
-            **Linux / macOS:** unzip, then run `chmod +x paddle && ./paddle`
-            **Windows:** unzip and run `paddle.exe`
-          files: dist/*.zip
-          make_latest: true
-          overwrite_files: true
-          fail_on_unmatched_files: true
+            | Archive | Platform |
+            | --- | --- |
+            | `paddle-linux-x86_64.zip` | Paddle — Linux |
+            | `paddle-windows-x86_64.zip` | Paddle — Windows |
+            | `paddle-macos-arm64.zip` | Paddle — macOS (Apple Silicon) |
+            | `bigtower-linux-x86_64.zip` | Big Tower — Linux |
+            | `bigtower-windows-x86_64.zip` | Big Tower — Windows |
+            | `bigtower-macos-arm64.zip` | Big Tower — macOS (Apple Silicon) |
 
-  release-bigtower:
-    name: Publish Big Tower release
-    needs: build-bigtower
-    runs-on: ubuntu-latest
+            Every archive contains a single self-contained executable, so there
+            is no loose asset folder to carry around.
 
-    steps:
-      - name: Download all Big Tower build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: bigtower-*
-          path: dist
-          merge-multiple: true
+            **Linux / macOS:** unzip, then run `chmod +x <game> && ./<game>`
+            **Windows:** unzip and run `<game>.exe`
 
-      - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: bigtower-latest
-          name: "Big Tower — latest build"
-          body: |
-            Automatic build of **Big Tower** from commit `${{ github.sha }}`
-            (branch `${{ github.ref_name }}`).
-
-            Every archive contains a single self-contained executable with the
-            game code, art, audio and maps bundled inside — no loose asset
-            folder required.
-
-            **Linux / macOS:** unzip, then run `chmod +x bigtower && ./bigtower`
-            **Windows:** unzip and run `bigtower.exe`
+            The Paddle archives also ship an empty `saves/` folder, which is
+            where the game stores your progress.
           files: dist/*.zip
           make_latest: true
           overwrite_files: true
