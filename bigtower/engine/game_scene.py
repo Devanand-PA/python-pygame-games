@@ -276,7 +276,7 @@ class GameScene(Scene):
                 alive.append(defender)
                 continue
             if defender.home is not None:
-                self.towers_by_cell.pop(defender.home, None)
+                self.towers_by_cell.pop(self.level.cell_of(defender.home), None)
             if self.selected_unit is defender:
                 self.selected_unit = None
             self.effects.append(("boom", list(defender.pos)))
@@ -577,6 +577,10 @@ class GameScene(Scene):
 
     def _try_place(self, cell):
         utype = self.selected_shop
+        # a tower that died in combat may have left a stale entry behind;
+        # drop it so the cell becomes buildable again
+        if cell in self.towers_by_cell and not self.towers_by_cell[cell].alive:
+            self.towers_by_cell.pop(cell, None)
         if not self.level.is_buildable(*cell) or cell in self.towers_by_cell:
             self.game.play("error", 0.4)
             return
@@ -609,7 +613,7 @@ class GameScene(Scene):
                 return
             self.gold += unit.sell_value()
             if unit.home is not None:
-                self.towers_by_cell.pop(unit.home, None)
+                self.towers_by_cell.pop(self.level.cell_of(unit.home), None)
             if unit in self.defenders:
                 self.defenders.remove(unit)
             self.selected_unit = None
@@ -847,6 +851,8 @@ class GameScene(Scene):
             return
         cell = self.level.cell_of(self.mouse_pos)
         center = self.level.cell_center(cell)
+        if cell in self.towers_by_cell and not self.towers_by_cell[cell].alive:
+            self.towers_by_cell.pop(cell, None)
         valid = (self.level.is_buildable(*cell)
                  and cell not in self.towers_by_cell
                  and self.gold >= utype.cost)
