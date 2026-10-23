@@ -553,7 +553,8 @@ shown.
 
 > **Empty means "all", not "none".** Leaving either list empty tells the game to
 > use the **whole race roster** (all of the race's units / enemies) rather than no
-> units at all:
+> units at all. So if a level's shop looks suspiciously full, check whether you
+> actually ticked anything — an empty list is not an empty shop.
 
 ### 10.6 The wave builder
 
