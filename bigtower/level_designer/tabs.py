@@ -19,6 +19,8 @@ from copy import deepcopy
 import pygame
 
 from core import settings as S
+from core.content import (DIALOGUE_TRIGGERS_NEEDING_VALUE, SCRIPT_TRIGGERS,
+                          normalize_script, validate_script)
 from engine import art
 from level_designer import layout as L
 from level_designer import widgets as W
@@ -450,7 +452,7 @@ class TerrainTab(FormTab):
         f["walkable"] = W.CheckField(self.ctx, (0, 0, 0, 0), "walkable")
         f["tint_enabled"] = W.CheckField(self.ctx, (0, 0, 0, 0), "custom tint")
         f["tint"] = W.ColorField(self.ctx, (0, 0, 0, 0), "tint RGB")
-        f["description"] = W.TextField(self.ctx, (0, 0, 0, 0), "description")
+        f["description"] = W.MultilineField(self.ctx, (0, 0, 0, 0), "description")
         order = ["id", "name", "char", "base_kind", "base_tile", "base_path",
                  "base_fw", "base_fh", "base_frames", "base_fps", "base_loop",
                  "overlay_kind", "overlay_tile", "overlay_path", "ov_fw", "ov_fh",
@@ -458,6 +460,15 @@ class TerrainTab(FormTab):
                  "tint_enabled", "tint", "description"]
         for idx, name in enumerate(order):
             self.place(name, idx % self.cols, idx // self.cols)
+        # the description is a tall box in its own band *under* the grid, so
+        # it can span both columns without covering the last form row
+        grid_rows = (len(order) + self.cols - 1) // self.cols
+        f["description"].set_rect(
+            pygame.Rect(L.FORM_X, L.TOP + grid_rows * L.ROW_H, L.FORM_W, 66))
+
+    def rows_used(self):
+        # the tall description band occupies ~3 extra grid rows
+        return super().rows_used() + 3
 
     @staticmethod
     def _sprite_spec(kind, tile, path, fw, fh, frames, fps, loop):
@@ -572,11 +583,11 @@ class TerrainTab(FormTab):
 
     # -- previews -----------------------------------------------------------
     def _base_preview_rect(self):
-        return pygame.Rect(L.FORM_X, self.below_form(), 130, 130)
+        return pygame.Rect(L.FORM_X, self.below_form(), 100, 100)
 
     def _overlay_preview_rect(self):
         base = self._base_preview_rect()
-        return pygame.Rect(base.x, base.bottom + 10, 130, 96)
+        return pygame.Rect(base.x, base.bottom + 10, 100, 80)
 
     def _handle_widgets(self, event):
         if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
@@ -788,7 +799,7 @@ class UnitsTab(FormTab):
         f["aggro"] = W.FloatField(self.ctx, (0, 0, 0, 0), "aggro radius")
         f["radius"] = W.FloatField(self.ctx, (0, 0, 0, 0), "body radius")
         f["can_be_attacked"] = W.CheckField(self.ctx, (0, 0, 0, 0), "attackable")
-        f["description"] = W.TextField(self.ctx, (0, 0, 0, 0), "description")
+        f["description"] = W.MultilineField(self.ctx, (0, 0, 0, 0), "description")
 
         order = ["id", "name", "side", "role",
                  "sprite_kind", "sprite_tile", "sprite_path", "sprite_shape",
@@ -801,6 +812,13 @@ class UnitsTab(FormTab):
                  "can_be_attacked", "description"]
         for idx, name in enumerate(order):
             self.place(name, idx % self.cols, idx // self.cols)
+        # the description is a tall band *under* the 3-column grid, spanning
+        # the full form width; the upgrade editor starts below it (see
+        # UNITS_UPGRADE_RECT in layout.py)
+        grid_rows = (len(order) + self.cols - 1) // self.cols
+        f["description"].set_rect(
+            pygame.Rect(L.FORM_X, L.TOP + grid_rows * L.ROW_H + 4,
+                        L.FORM_W, 56))
         self.upgrade_editor = W.UpgradePathEditor(self.ctx, L.UNITS_UPGRADE_RECT)
 
     # -- sprite spec --------------------------------------------------------
@@ -970,7 +988,7 @@ class RacesTab(FormTab):
         f["color"] = W.ColorField(self.ctx, (0, 0, 0, 0), "colour RGB")
         f["tint_enabled"] = W.CheckField(self.ctx, (0, 0, 0, 0), "unit tint")
         f["tint"] = W.ColorField(self.ctx, (0, 0, 0, 0), "tint RGB")
-        f["description"] = W.TextField(self.ctx, (0, 0, 0, 0), "description")
+        f["description"] = W.MultilineField(self.ctx, (0, 0, 0, 0), "description")
         self.place("id", 0, 0)
         self.place("name", 1, 0)
         self.place("order", 0, 1)
@@ -979,17 +997,21 @@ class RacesTab(FormTab):
         self.place("color", 1, 2)
         self.place("tint_enabled", 0, 3)
         self.place("tint", 1, 3)
+        # a taller description box on rows 4..6 (84px); everything else sits
+        # in its own band below, so nothing ever stacks on the box
         self.place("description", 0, 4, span=2, label_w=110)
+        f["description"].set_rect(
+            pygame.Rect(self.col_x[0], L.TOP + 4 * L.ROW_H, L.FORM_W, 84))
 
-        sel_top = self.below_form() + 28
+        sel_top = L.TOP + 250                    # 312: clears the description
+        roster_h = 332                           # ends at 644, above the note
         self.units_sel = W.MultiSelect(
-            self.ctx, (self.col_x[0], sel_top, self.col_w,
-                       L.BOTTOM - sel_top))
+            self.ctx, (self.col_x[0], sel_top, self.col_w, roster_h))
         self.enemies_sel = W.MultiSelect(
-            self.ctx, (self.col_x[1], sel_top, self.col_w,
-                       L.BOTTOM - sel_top))
-        self.units_label_y = sel_top - 20
-        self.race_note_y = L.BOTTOM - 60
+            self.ctx, (self.col_x[1], sel_top, self.col_w, roster_h))
+        self.units_label_y = sel_top - 20        # 292: roster captions
+        self.hint_y = sel_top - 40                # 272: the base-hero hint
+        self.race_note_y = sel_top + roster_h + 12   # 656: race level footer
 
     def _hero_options(self, hero=None):
         options = [HERO_NONE] + [u.id for u in self.app.content.sorted_units("defender")]
@@ -1031,7 +1053,7 @@ class RacesTab(FormTab):
               (self.units_sel.rect.x, self.units_label_y))
         _text(self.ctx, "Enemies", (self.enemies_sel.rect.x, self.units_label_y))
         _text(self.ctx, "base hero is summoned when an attacker reaches the base",
-              (self.units_sel.rect.x, self.units_label_y - 20), W.DIM)
+              (self.units_sel.rect.x, self.hint_y), W.DIM)
         self.units_sel.draw(self.ctx.canvas)
         self.enemies_sel.draw(self.ctx.canvas)
         # levels belonging to this race (managed from the Levels tab)
@@ -1083,6 +1105,11 @@ class MapCanvas:
         self.path = []
         self.path_ok = False
         self._dirty = True
+        # designer-painted route (overrides the BFS preview and the game's
+        # auto route); "path mode" turns painting into waypoint editing
+        self.custom_path = []          # [(x, y), ...] grid cells
+        self.path_mode = False
+        self._path_paint = False
         self.scroll_x = 0.0
         self.scroll_y = 0.0
         self.space_down = False
@@ -1226,6 +1253,62 @@ class MapCanvas:
     def terrain_at(self, ch):
         return self.app.terrain_lookup().get(ch)
 
+    # -- custom path editing -------------------------------------------------
+    def _in_bounds(self, cell):
+        x, y = cell
+        return 0 <= x < self.width and 0 <= y < self.height
+
+    def set_custom_path(self, cells):
+        """Load the level's painted route (``[[x, y], ...]`` or None-ish)."""
+        self.custom_path = []
+        for item in cells or []:
+            try:
+                cell = (int(item[0]), int(item[1]))
+            except (TypeError, ValueError, IndexError):
+                continue
+            if self._in_bounds(cell) and (not self.custom_path
+                                          or self.custom_path[-1] != cell):
+                self.custom_path.append(cell)
+        self._dirty = True
+
+    def path_add(self, cell):
+        """Append a waypoint; returns True when something changed."""
+        if cell is None or not self._in_bounds(cell):
+            return False
+        if self.custom_path and self.custom_path[-1] == cell:
+            return False
+        self.custom_path.append(cell)
+        self._dirty = True
+        return True
+
+    def path_remove_nearest(self, cell):
+        """Drop the waypoint within one cell of *cell*; True on change."""
+        best, best_d = None, 2.0          # squared distance in cells
+        for index, point in enumerate(self.custom_path):
+            d = (point[0] - cell[0]) ** 2 + (point[1] - cell[1]) ** 2
+            if d < best_d:
+                best, best_d = index, d
+        if best is None:
+            return False
+        self.custom_path.pop(best)
+        self._dirty = True
+        return True
+
+    def path_clear(self):
+        if not self.custom_path:
+            return False
+        self.custom_path = []
+        self._dirty = True
+        return True
+
+    def path_auto(self):
+        """Replace the painted route with the BFS route over walkable cells."""
+        if not self.path:
+            self.recompute_path()
+        self.custom_path = list(self.path)
+        self._dirty = True
+        return True
+
     def recompute_path(self):
         lookup = self.app.terrain_lookup()
         spawn = base = None
@@ -1327,11 +1410,21 @@ class MapCanvas:
             self._pan_from(event.pos, (self.scroll_x, self.scroll_y))
             return True
         if event.button in (1, 3):
+            cell = self._cell_at(event.pos)
+            if self.path_mode:
+                if event.button == 1:
+                    self._begin_stroke()
+                    self._path_paint = True
+                    self._end_stroke(self.path_add(cell))
+                else:
+                    self._begin_stroke()
+                    self._end_stroke(self.path_remove_nearest(cell))
+                return True
             self._press = (event.pos, event.button)
             if event.button == 1:
                 self.painting = True
                 self._begin_stroke()
-                self._end_stroke(self.paint(self._cell_at(event.pos), self.selected))
+                self._end_stroke(self.paint(cell, self.selected))
             return True
         return False
 
@@ -1341,6 +1434,9 @@ class MapCanvas:
             self.scroll_x = sx - (event.pos[0] - origin[0])
             self.scroll_y = sy - (event.pos[1] - origin[1])
             self._clamp_scroll()
+            return True
+        if self._path_paint:
+            self._end_stroke(self.path_add(self._cell_at(event.pos)))
             return True
         if self.painting:
             self._end_stroke(self.paint(self._cell_at(event.pos), self.selected))
@@ -1359,6 +1455,10 @@ class MapCanvas:
         self._pan = None
         self._press = None
         self.painting = False
+        if self._path_paint:
+            self._path_paint = False
+            self._end_stroke(False)
+            return True
         if pan is not None:
             return True
         if painting:
@@ -1405,8 +1505,22 @@ class MapCanvas:
                     canvas.blit(self._marker(ch), pos)
                 else:
                     canvas.blit(self._tile(ch), pos)
-        # path preview
-        if len(self.path) > 1:
+        # path preview: a painted route takes over (cyan, numbered); otherwise
+        # the BFS route shows in yellow
+        if self.custom_path:
+            pts = [self.cell_center(x, y) for x, y in self.custom_path]
+            if len(pts) > 1:
+                pygame.draw.lines(canvas, (110, 220, 240), False, pts, 3)
+            for index, (x, y) in enumerate(self.custom_path):
+                cx, cy = self.cell_center(x, y)
+                r = max(3, self.cell // 4)
+                pygame.draw.circle(canvas, (110, 220, 240), (cx, cy), r)
+                pygame.draw.circle(canvas, (12, 12, 18), (cx, cy), r, 1)
+                if self.cell >= 12:
+                    num = self.ctx.fonts["small"].render(
+                        str(index + 1), True, (12, 12, 18))
+                    canvas.blit(num, num.get_rect(center=(cx, cy)))
+        elif len(self.path) > 1:
             pts = [self.cell_center(x, y) for x, y in self.path]
             pygame.draw.lines(canvas, (255, 240, 120), False, pts, 2)
         if self.cell >= 10:                     # grid lines are noise when tiny
@@ -1419,7 +1533,7 @@ class MapCanvas:
                 pygame.draw.line(canvas, (255, 255, 255, 30), (self.rect.x, gy),
                                  (self.rect.right, gy), 1)
         pygame.draw.rect(canvas, (70, 70, 100), self.map_rect, 1)
-        if not self.path_ok:
+        if not self.path_ok and not self.custom_path:
             pygame.draw.rect(canvas, (200, 60, 60), self.rect, 2)
         canvas.set_clip(None)
         pygame.draw.rect(canvas, W.EDGE, self.rect, 1)
@@ -1552,12 +1666,53 @@ class LevelsTab(UndoMixin):
                              self.zoom_y, L.ZOOM_BTN_W, L.ZOOM_BTN_H),
                   "fit map", self.map.fit_view),
         ]
+        # enemy-route controls: paint waypoints ("Edit path" toggles the map
+        # into path mode), restore the BFS route, or wipe the painted one
+        px = L.MAP_X + 3 * (L.ZOOM_BTN_W + L.ZOOM_BTN_GAP) + 10
+        pw = (L.MAP_X + L.MAP_W - px - 2 * 6) // 3
+        self.path_btn = W.Btn(self.ctx, (px, self.zoom_y, pw, L.ZOOM_BTN_H),
+                              "Edit path", self.toggle_path_mode)
+        self.path_auto_btn = W.Btn(self.ctx, (px + pw + 6, self.zoom_y, pw,
+                                              L.ZOOM_BTN_H), "Auto path",
+                                   self.auto_path)
+        self.path_clear_btn = W.Btn(self.ctx, (px + 2 * (pw + 6), self.zoom_y,
+                                               pw, L.ZOOM_BTN_H), "Clear path",
+                                    self.clear_path, color=(90, 54, 54))
+        self.path_buttons = [self.path_btn, self.path_auto_btn,
+                             self.path_clear_btn]
         self.zoom_readout_x = L.MAP_X + 3 * (L.ZOOM_BTN_W + L.ZOOM_BTN_GAP)
 
     def map_to_origin(self):
         self.map.scroll_x = 0.0
         self.map.scroll_y = 0.0
         self.map._clamp_scroll()
+
+    # -- custom path controls ------------------------------------------------
+    def toggle_path_mode(self):
+        self.map.path_mode = not self.map.path_mode
+        # immediate visual feedback (the draw path re-syncs it too)
+        self.path_btn.color = W.ACCENT if self.map.path_mode else W.PANEL2
+        self.app.set_status("Path editing {}".format(
+            "on - left click/drag adds waypoints, right click removes"
+            if self.map.path_mode else "off"), W.ACCENT if self.map.path_mode
+            else W.DIM)
+
+    def auto_path(self):
+        self.apply_current()          # snapshot the map as it is *now*
+        self.record("auto path")
+        self.map.path_auto()
+        self.app.set_status("Path: {} waypoints from the automatic route"
+                            .format(len(self.map.custom_path)))
+
+    def clear_path(self):
+        self.apply_current()
+        self.record("clear path")
+        if self.map.path_clear():
+            self.app.set_status("Path: cleared - enemies use the automatic "
+                                "route", W.OK)
+        else:
+            self.app.set_status("Path: already using the automatic route",
+                                W.DIM)
 
     def _zoom_button(self, notches):
         centre = (self.map.rect.centerx, self.map.rect.centery)
@@ -1589,8 +1744,8 @@ class LevelsTab(UndoMixin):
                                                  label_w=70)
         f["terrain_tint"] = W.ColorField(self.ctx, (0, 0, 0, 0), "tint RGB", label_w=70)
         f["height"] = W.IntField(self.ctx, (0, 0, 0, 0), "grid H", label_w=70)
-        f["description"] = W.TextField(self.ctx, (0, 0, 0, 0), "description",
-                                       label_w=96)
+        f["description"] = W.MultilineField(self.ctx, (0, 0, 0, 0), "description",
+                                            label_w=96)
         rows = [("id", 0, 0, 1), ("name", 1, 0, 1),
                 ("race", 0, 1, 1), ("order", 1, 1, 1),
                 ("gold", 0, 2, 1), ("gold_per_sec", 1, 2, 1),
@@ -1600,6 +1755,10 @@ class LevelsTab(UndoMixin):
         for name, col, row, span in rows:
             width = L.LEVEL_COL_W * span + L.COL_GAP * (span - 1)
             f[name].set_rect(L.row_rect(row, L.LEVEL_COLS[col], width))
+        # the description is a three-row box; the wave builder moved down with
+        # it (see layout.WAVE_LABEL_Y)
+        f["description"].set_rect(
+            pygame.Rect(L.LEVEL_COLS[0], L.TOP + 5 * L.ROW_H, L.LEVEL_FORM_W, 84))
 
     def entry_label(self, item):
         return "{} [{}]".format(item.get("name", item.get("id")), item.get("race", "?"))
@@ -1614,7 +1773,7 @@ class LevelsTab(UndoMixin):
                 "gold_per_sec": S.DEFAULT_GOLD_PER_SEC, "lives": 20,
                 "order": 99, "grid": ["".join(r) for r in grid],
                 "terrain_tint": None, "available_units": [], "enemy_pool": [],
-                "waves": []}
+                "waves": [], "path": []}
 
     # -- list ops -----------------------------------------------------------
     def refresh(self, select=None):
@@ -1650,6 +1809,7 @@ class LevelsTab(UndoMixin):
         grid = item.get("grid") or []
         self.map.resize(len(grid[0]) if grid else 20, len(grid) if grid else 10)
         self.map.set_grid(grid)
+        self.map.set_custom_path(item.get("path"))
         self._sync_size_fields()
         self.avail_sel.set_options(
             [(u.id, u.name) for u in self.app.content.sorted_units("defender")],
@@ -1696,6 +1856,7 @@ class LevelsTab(UndoMixin):
             "available_units": self.avail_sel.value,
             "enemy_pool": self.enemy_sel.value,
             "waves": deepcopy(self._waves()),
+            "path": [list(cell) for cell in self.map.custom_path],
         }
 
     def _signature(self):
@@ -1964,7 +2125,8 @@ class LevelsTab(UndoMixin):
         for w in (self.wave_list, self.group_list):
             if w.handle_event(event):
                 return True
-        for b in self.list_buttons + self.wave_buttons + self.group_buttons:
+        for b in (self.list_buttons + self.wave_buttons + self.group_buttons
+                  + self.path_buttons):
             if b.handle_event(event):
                 return True
         for field in self.fields.values():
@@ -2035,11 +2197,8 @@ class LevelsTab(UndoMixin):
         self.map.draw()
         self._draw_map_readout()
         self._draw_palette()
-        for b in self.zoom_buttons:
+        for b in self.zoom_buttons + self.path_buttons:
             b.draw(self.ctx.canvas)
-        _right_text(self.ctx, "{} px / cell   -   {}".format(
-            self.map.cell, self._visible_cells()), L.MAP_X + L.MAP_W,
-            self.zoom_y + 5, W.OK if self.map.fits else W.ACCENT)
 
         _text(self.ctx, "Available units", (self.avail_sel.rect.x, L.SEL_LABEL_Y))
         _text(self.ctx, "Enemy pool", (self.enemy_sel.rect.x, L.SEL_LABEL_Y))
@@ -2063,17 +2222,663 @@ class LevelsTab(UndoMixin):
               (L.LEVEL_FORM_X, L.GROUP_FIELD_Y + 34), W.DIM)
 
     def _draw_map_readout(self):
-        status = "path OK" if self.map.path_ok else "NO PATH from S to B"
-        colour = W.OK if self.map.path_ok else W.BAD
-        _text(self.ctx, "Map {} x {} cells   -   {}".format(
-            self.map.width, self.map.height, status), (L.MAP_X, L.TOP), colour)
-        _right_text(self.ctx, "wheel: zoom   drag: pan   Ctrl+Z: undo",
-                    L.MAP_X + L.MAP_W, L.TOP, W.DIM)
+        # keep the toggle visually in sync with the mode
+        self.path_btn.color = W.ACCENT if self.map.path_mode else W.PANEL2
+        if self.map.custom_path:
+            status = "custom path ({} waypoints)".format(
+                len(self.map.custom_path))
+            colour = W.ACCENT
+        else:
+            status = "path OK" if self.map.path_ok else "NO PATH from S to B"
+            colour = W.OK if self.map.path_ok else W.BAD
+        # the zoom readout lives on the top line now - the zoom row itself is
+        # full of path buttons (kept compact so it clears the right-hand hint)
+        _text(self.ctx, "Map {}x{} - {} px/cell - {}".format(
+            self.map.width, self.map.height, self.map.cell, status),
+            (L.MAP_X, L.TOP), colour)
+        hint = "wheel: zoom   drag: pan   Ctrl+Z: undo"
+        if not self.map.fits:
+            hint = "{} visible   |   {}".format(self._visible_cells(), hint)
+        _right_text(self.ctx, hint, L.MAP_X + L.MAP_W, L.TOP, W.DIM)
 
     def _visible_cells(self):
         x0, y0, x1, y1 = self.map.visible_range()
         return "{}x{} of {}x{}".format(x1 - x0 + 1, y1 - y0 + 1,
                                       self.map.width, self.map.height)
+
+
+# ===========================================================================
+# script (story dialogues and cutscenes)
+# ===========================================================================
+SCRIPT_SECTIONS = ("Intro slides", "Outro: victory", "Outro: defeat",
+                   "Checkpoints")
+_SECTION_KEYS = ("intro", "victory", "defeat", "checkpoints")
+
+
+class ScriptTab(UndoMixin):
+    """Edit a level's story: intro/outro cutscenes + dialogue checkpoints.
+
+    The left column picks the level; the middle column switches between the
+    four story sections and lists their entries; the right column edits the
+    selected slide or checkpoint.  Saving writes the script back into the
+    level's JSON via ``ContentDB.save_level`` -- nothing else in the level is
+    touched.
+    """
+
+    title = "Script"
+
+    def __init__(self, app):
+        self.app = app
+        self.ctx = app.ctx
+        self.section = 0
+        self.sel_index = -1
+        self.line_index = -1
+        self._baseline = {}          # level id -> script dict at load time
+        self.list = W.ScrollList(self.ctx, (L.LIST_X, L.TOP, L.LIST_W, 504),
+                                 [], on_select=self._on_level)
+        self.undo_btn = self._btn(L.LIST_X, 0, "Undo", self.undo)
+        self.redo_btn = self._btn(L.LIST_X + L.BTN_W + 8, 0, "Redo", self.redo)
+        self.save_btn = self._btn(L.LIST_X, 1, "Save", self.save,
+                                  color=(64, 92, 70))
+        self.buttons = [self.undo_btn, self.redo_btn, self.save_btn]
+        # section strip
+        self.section_buttons = []
+        x = SCRIPT_MID_X
+        for index, name in enumerate(SCRIPT_SECTIONS):
+            width = 108
+            self.section_buttons.append(
+                W.Btn(self.ctx, (x, L.TOP, width, 26), name,
+                      self._switch_section(index),
+                      color=W.PANEL2))
+            x += width + 6
+        self.item_list = W.ScrollList(self.ctx, SCRIPT_LIST_RECT, [],
+                                      on_select=self._on_item)
+        self.item_buttons = [
+            W.Btn(self.ctx, (SCRIPT_MID_X, ITEM_BTN_Y, 82, 26), "Add",
+                  self.add_item),
+            W.Btn(self.ctx, (SCRIPT_MID_X + 88, ITEM_BTN_Y, 82, 26), "Del",
+                  self.del_item, color=(90, 54, 54)),
+            W.Btn(self.ctx, (SCRIPT_MID_X + 176, ITEM_BTN_Y, 82, 26), "Dup",
+                  self.dup_item),
+            W.Btn(self.ctx, (SCRIPT_MID_X + 264, ITEM_BTN_Y, 82, 26), "Up",
+                  self.move_item_up),
+            W.Btn(self.ctx, (SCRIPT_MID_X + 352, ITEM_BTN_Y, 82, 26), "Down",
+                  self.move_item_down),
+        ]
+        self._build_editor()
+        self.items = []              # level dicts; filled by on_show()
+        self.current_level = None
+        self.setup_history()
+        self.on_show()
+
+    # -- geometry / construction -------------------------------------------
+    def _btn(self, x, row, text, fn, color=W.PANEL2):
+        return W.Btn(self.ctx, (x, L.BTN_ROWS[row], L.BTN_W, L.BTN_H),
+                     text, fn, color=color)
+
+    def _build_editor(self):
+        f = self.fields = {}
+        f["speaker"] = W.TextField(self.ctx, (0, 0, 0, 0), "speaker")
+        f["caption"] = W.TextField(self.ctx, (0, 0, 0, 0), "caption")
+        f["image"] = W.ImageField(self.ctx, (0, 0, 0, 0), "image png")
+        f["text"] = W.MultilineField(self.ctx, (0, 0, 0, 0), "text")
+        f["cp_id"] = W.TextField(self.ctx, (0, 0, 0, 0), "id")
+        f["trigger"] = W.ChoiceField(self.ctx, (0, 0, 0, 0), "trigger",
+                                     list(SCRIPT_TRIGGERS))
+        f["value"] = W.IntField(self.ctx, (0, 0, 0, 0), "value", 0)
+        f["once"] = W.CheckField(self.ctx, (0, 0, 0, 0), "only once", True)
+        f["line_speaker"] = W.TextField(self.ctx, (0, 0, 0, 0), "speaker")
+        f["line_side"] = W.ChoiceField(self.ctx, (0, 0, 0, 0), "side",
+                                       list(("left", "right")))
+        f["line_image"] = W.ImageField(self.ctx, (0, 0, 0, 0), "image png")
+        f["line_text"] = W.MultilineField(self.ctx, (0, 0, 0, 0), "text")
+
+        f["speaker"].set_rect(pygame.Rect(EDITOR_X, L.TOP, EDITOR_W, 30))
+        f["caption"].set_rect(pygame.Rect(EDITOR_X, L.TOP + 34, EDITOR_W, 30))
+        f["image"].set_rect(pygame.Rect(EDITOR_X, L.TOP + 68, EDITOR_W, 30))
+        self.slide_text_rect = pygame.Rect(EDITOR_X, L.TOP + 106, EDITOR_W, 120)
+        f["text"].set_rect(self.slide_text_rect)
+
+        half = (EDITOR_W - 8) // 2
+        f["cp_id"].set_rect(pygame.Rect(EDITOR_X, L.TOP, half, 30))
+        f["trigger"].set_rect(pygame.Rect(EDITOR_X + half + 8, L.TOP, half, 30))
+        f["value"].set_rect(pygame.Rect(EDITOR_X, L.TOP + 34, half, 30))
+        f["once"].set_rect(pygame.Rect(EDITOR_X + half + 8, L.TOP + 34,
+                                       half, 30))
+        self.value_hint_y = L.TOP + 68          # between the rows and Lines
+        self.lines_label_y = L.TOP + 86
+        self.lines_rect = pygame.Rect(EDITOR_X, self.lines_label_y + 18,
+                                      EDITOR_W, 90)
+        self.line_list = W.ScrollList(self.ctx, self.lines_rect, [],
+                                      on_select=self._on_line)
+        line_btn_y = self.lines_rect.bottom + 6
+        self.line_buttons = [
+            W.Btn(self.ctx, (EDITOR_X, line_btn_y, 82, 26), "Add line",
+                  self.add_line),
+            W.Btn(self.ctx, (EDITOR_X + 88, line_btn_y, 82, 26), "Del line",
+                  self.del_line, color=(90, 54, 54)),
+            W.Btn(self.ctx, (EDITOR_X + 176, line_btn_y, 56, 26), "Up",
+                  self.move_line_up),
+            W.Btn(self.ctx, (EDITOR_X + 238, line_btn_y, 56, 26), "Down",
+                  self.move_line_down),
+        ]
+        line_edit_y = line_btn_y + 34
+        f["line_speaker"].set_rect(pygame.Rect(
+            EDITOR_X, line_edit_y, half, 30))
+        f["line_side"].set_rect(pygame.Rect(
+            EDITOR_X + half + 8, line_edit_y, half, 30))
+        f["line_image"].set_rect(pygame.Rect(
+            EDITOR_X, line_edit_y + 34, EDITOR_W, 30))
+        self.line_text_rect = pygame.Rect(EDITOR_X, line_edit_y + 72,
+                                          EDITOR_W, 96)
+        f["line_text"].set_rect(self.line_text_rect)
+
+    # -- data ---------------------------------------------------------------
+    def _script_of(self, level):
+        if level.get("script") is None or not isinstance(level.get("script"),
+                                                         dict):
+            level["script"] = normalize_script(level.get("script"))
+        return level["script"]
+
+    def _section_items(self):
+        level = self.current_level
+        if level is None:
+            return None
+        script = self._script_of(level)
+        if self.section == 0:
+            return script.setdefault("intro", [])
+        if self.section in (1, 2):
+            outro = script.setdefault("outro", {})
+            key = "victory" if self.section == 1 else "defeat"
+            return outro.setdefault(key, [])
+        return script.setdefault("checkpoints", [])
+
+    def _current_item(self):
+        items = self._section_items()
+        if items and 0 <= self.sel_index < len(items):
+            return items[self.sel_index]
+        return None
+
+    def _current_line(self):
+        item = self._current_item()
+        if not isinstance(item, dict):
+            return None
+        lines = item.get("lines") or []
+        if 0 <= self.line_index < len(lines):
+            return lines[self.line_index]
+        return None
+
+    def _snapshot(self):
+        scripts = {lv.get("id"): deepcopy(lv.get("script"))
+                   for lv in self.items}
+        return {"scripts": scripts,
+                "level": self.current_level.get("id") if self.current_level
+                else None,
+                "section": self.section, "sel": self.sel_index,
+                "line": self.line_index}
+
+    def _restore(self, state):
+        self._restoring = True
+        try:
+            for lv in self.items:
+                lid = lv.get("id")
+                if lid in state["scripts"]:
+                    lv["script"] = deepcopy(state["scripts"][lid])
+            self._sync_level_list(keep_id=state["level"])
+            self.section = max(0, min(3, state["section"]))
+            self.sel_index = state["sel"]
+            self.line_index = state["line"]
+            self._sync_section_buttons()
+            self._refresh_items()
+            self._load_editor()
+        finally:
+            self._restoring = False
+
+    def _doc_key(self):
+        try:
+            return json.dumps({lv.get("id"): lv.get("script")
+                               for lv in self.items},
+                              sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            return repr([lv.get("script") for lv in self.items])
+
+    # -- loading / selection ------------------------------------------------
+    def on_show(self):
+        self.items = [dict(lv) for lv in self.app.content.levels.values()]
+        self.items.sort(key=lambda lv: (lv.get("race", ""), lv.get("order", 0),
+                                        lv.get("id", "")))
+        self._baseline = {lv.get("id"): deepcopy(lv.get("script"))
+                          for lv in self.items}
+        keep = self.current_level.get("id") if self.current_level else None
+        self._sync_level_list(keep_id=keep)
+        self._sync_section_buttons()
+        self._refresh_items()
+        self._load_editor()
+        self.mark_saved()
+
+    def _sync_level_list(self, keep_id=None):
+        labels = ["{} [{}]".format(lv.get("name", lv.get("id")),
+                                   lv.get("race", "?")) for lv in self.items]
+        self.list.set_items(labels, keep=False)
+        index = 0
+        if keep_id:
+            for i, lv in enumerate(self.items):
+                if lv.get("id") == keep_id:
+                    index = i
+                    break
+        self.list.index = index
+        self.current_level = self.items[index] if self.items else None
+
+    def _on_level(self, _label):
+        self.current_level = (self.items[self.list.index]
+                              if 0 <= self.list.index < len(self.items)
+                              else None)
+        self.sel_index = -1
+        self.line_index = -1
+        self._refresh_items()
+        self._load_editor()
+
+    def _switch_section(self, index):
+        def switch():
+            self.section = index
+            self.sel_index = -1
+            self.line_index = -1
+            self._sync_section_buttons()
+            self._refresh_items()
+            self._load_editor()
+        return switch
+
+    def _sync_section_buttons(self):
+        for index, button in enumerate(self.section_buttons):
+            button.color = W.ACCENT if index == self.section else W.PANEL2
+
+    def _refresh_items(self):
+        items = self._section_items() or []
+        if self.section == 3:
+            labels = ["{} ({})".format(cp.get("id", "?"),
+                                       cp.get("trigger", "?"))
+                      for cp in items]
+        else:
+            labels = ["Slide {}: {}".format(
+                i + 1, (cp.get("speaker") or cp.get("caption")
+                        or (cp.get("text") or "")[:24] or "(empty)"))
+                for i, cp in enumerate(items)]
+        self.item_list.set_items(labels, keep=False)
+        if items:
+            self.sel_index = max(0, min(self.sel_index if self.sel_index >= 0
+                                        else 0, len(items) - 1))
+            self.item_list.index = self.sel_index
+        else:
+            self.sel_index = -1
+            self.item_list.index = -1
+
+    def _on_item(self, _label):
+        items = self._section_items() or []
+        self.sel_index = (self.item_list.index
+                          if 0 <= self.item_list.index < len(items) else -1)
+        self.line_index = -1
+        self._refresh_lines()
+        self._load_editor()
+
+    # -- item ops -----------------------------------------------------------
+    def _record_if_needed(self):
+        pass                      # structural ops record explicitly
+
+    def add_item(self):
+        self.record("add")
+        items = self._section_items()
+        if items is None:
+            return
+        if self.section == 3:
+            base = "checkpoint"
+            ids = {cp.get("id") for cp in items}
+            cid, n = base, 2
+            while cid in ids:
+                cid = f"{base}_{n}"
+                n += 1
+            items.append({"id": cid, "trigger": "level_start", "value": 0,
+                          "once": True,
+                          "lines": [{"image": None, "speaker": "",
+                                     "text": "", "side": "left"}]})
+        else:
+            items.append({"image": None, "speaker": "", "caption": "",
+                          "text": ""})
+        self.sel_index = len(items) - 1
+        self.line_index = -1
+        self._refresh_items()
+        self._refresh_lines()
+        self._load_editor()
+
+    def del_item(self):
+        items = self._section_items()
+        item = self._current_item()
+        if not items or item is None:
+            return
+        self.record("delete")
+        items.remove(item)
+        self.sel_index = min(self.sel_index, len(items) - 1)
+        self.line_index = -1
+        self._refresh_items()
+        self._refresh_lines()
+        self._load_editor()
+
+    def dup_item(self):
+        items = self._section_items()
+        item = self._current_item()
+        if not items or item is None:
+            return
+        self.record("duplicate")
+        data = deepcopy(item)
+        if self.section == 3:
+            ids = {cp.get("id") for cp in items}
+            base = f"{data.get('id', 'checkpoint')}_copy"
+            cid, n = base, 2
+            while cid in ids:
+                cid = f"{base}_{n}"
+                n += 1
+            data["id"] = cid
+        items.insert(self.sel_index + 1, data)
+        self.sel_index += 1
+        self._refresh_items()
+        self._refresh_lines()
+        self._load_editor()
+
+    def _move(self, step):
+        items = self._section_items()
+        if not items or not (0 <= self.sel_index < len(items)):
+            return
+        target = self.sel_index + step
+        if not (0 <= target < len(items)):
+            return
+        self.record("reorder")
+        items[self.sel_index], items[target] = items[target], items[self.sel_index]
+        self.sel_index = target
+        self._refresh_items()
+        self._load_editor()
+
+    def move_item_up(self):
+        self._move(-1)
+
+    def move_item_down(self):
+        self._move(1)
+
+    # -- line ops (checkpoints only) ---------------------------------------
+    def _refresh_lines(self):
+        item = self._current_item()
+        lines = (item.get("lines") or []) if isinstance(item, dict) else []
+        labels = ["Line {}: {}".format(
+            i + 1, (ln.get("speaker") or (ln.get("text") or "")[:24]
+                    or "(empty)"))
+            for i, ln in enumerate(lines)]
+        self.line_list.set_items(labels, keep=False)
+        if lines:
+            self.line_index = max(0, min(self.line_index
+                                         if self.line_index >= 0 else 0,
+                                         len(lines) - 1))
+            self.line_list.index = self.line_index
+        else:
+            self.line_index = -1
+            self.line_list.index = -1
+
+    def _on_line(self, _label):
+        item = self._current_item()
+        lines = (item.get("lines") or []) if isinstance(item, dict) else []
+        self.line_index = (self.line_list.index
+                           if 0 <= self.line_list.index < len(lines) else -1)
+        self._load_line_editor()
+
+    def add_line(self):
+        item = self._current_item()
+        if not isinstance(item, dict) or self.section != 3:
+            return
+        self.record("add line")
+        item.setdefault("lines", []).append({"image": None, "speaker": "",
+                                             "text": "", "side": "left"})
+        self.line_index = len(item["lines"]) - 1
+        self._refresh_lines()
+        self._load_line_editor()
+
+    def del_line(self):
+        item = self._current_item()
+        lines = (item.get("lines") or []) if isinstance(item, dict) else []
+        if not lines or not (0 <= self.line_index < len(lines)):
+            return
+        self.record("delete line")
+        lines.pop(self.line_index)
+        self.line_index = min(self.line_index, len(lines) - 1)
+        self._refresh_lines()
+        self._load_line_editor()
+
+    def _move_line(self, step):
+        item = self._current_item()
+        lines = (item.get("lines") or []) if isinstance(item, dict) else []
+        if not lines or not (0 <= self.line_index < len(lines)):
+            return
+        target = self.line_index + step
+        if not (0 <= target < len(lines)):
+            return
+        self.record("reorder line")
+        lines[self.line_index], lines[target] = lines[target], lines[self.line_index]
+        self.line_index = target
+        self._refresh_lines()
+        self._load_line_editor()
+
+    def move_line_up(self):
+        self._move_line(-1)
+
+    def move_line_down(self):
+        self._move_line(1)
+
+    # -- editor load/apply --------------------------------------------------
+    def _load_editor(self):
+        self._load_slide_editor()
+        self._load_line_editor()
+
+    def _load_slide_editor(self):
+        f = self.fields
+        item = self._current_item()
+        if item is None or self.section == 3:
+            for name in ("speaker", "caption", "image", "text"):
+                f[name].set_value("")
+            return
+        f["speaker"].set_value(item.get("speaker", ""))
+        f["caption"].set_value(item.get("caption", ""))
+        f["image"].set_value(item.get("image") or "")
+        f["text"].set_value(item.get("text", ""))
+
+    def _load_checkpoint_editor(self):
+        f = self.fields
+        item = self._current_item()
+        if item is None or self.section != 3:
+            f["cp_id"].set_value("")
+            f["trigger"].set_value("level_start")
+            f["value"].set_value(0)
+            f["once"].set_value(True)
+            return
+        f["cp_id"].set_value(item.get("id", ""))
+        f["trigger"].set_value(item.get("trigger", "level_start"))
+        f["value"].set_value(item.get("value", 0))
+        f["once"].set_value(bool(item.get("once", True)))
+
+    def _load_line_editor(self):
+        self._load_checkpoint_editor()
+        f = self.fields
+        line = self._current_line()
+        if line is None:
+            f["line_speaker"].set_value("")
+            f["line_side"].set_value("left")
+            f["line_image"].set_value("")
+            f["line_text"].set_value("")
+            return
+        f["line_speaker"].set_value(line.get("speaker", ""))
+        f["line_side"].set_value(line.get("side", "left"))
+        f["line_image"].set_value(line.get("image") or "")
+        f["line_text"].set_value(line.get("text", ""))
+
+    def _signature(self):
+        item = self._current_item()
+        line = self._current_line()
+        try:
+            return json.dumps({"item": item, "line": line}, sort_keys=True,
+                              default=str)
+        except (TypeError, ValueError):
+            return repr((item, line))
+
+    def _apply_editor(self):
+        """Write the editor fields back into the current slide/line."""
+        item = self._current_item()
+        if item is not None:
+            if self.section == 3:
+                item["id"] = self.fields["cp_id"].value.strip() or "checkpoint"
+                item["trigger"] = self.fields["trigger"].value
+                item["value"] = max(0, self.fields["value"].value)
+                item["once"] = self.fields["once"].checked
+            else:
+                item["speaker"] = self.fields["speaker"].value
+                item["caption"] = self.fields["caption"].value
+                item["image"] = self.fields["image"].value.strip() or None
+                item["text"] = self.fields["text"].value
+        line = self._current_line()
+        if line is not None:
+            line["speaker"] = self.fields["line_speaker"].value
+            line["side"] = self.fields["line_side"].value
+            line["image"] = self.fields["line_image"].value.strip() or None
+            line["text"] = self.fields["line_text"].value
+
+    # -- save ---------------------------------------------------------------
+    def save(self):
+        self._apply_editor()
+        problems = []
+        for lv in self.items:
+            problems.extend(f"{lv.get('id')}: {p}"
+                            for p in validate_script(lv))
+        if problems:
+            self.app.set_status("ERROR: " + problems[0], W.BAD)
+            return
+        saved = 0
+        for lv in self.items:
+            if lv.get("script") != self._baseline.get(lv.get("id")):
+                self.app.content.save_level(lv)
+                self._baseline[lv.get("id")] = deepcopy(lv.get("script"))
+                saved += 1
+        self.app.content.reload()
+        art.clear_caches()
+        self.mark_saved()
+        self.app.set_status("Script: saved {} level(s)".format(saved))
+
+    # -- events -------------------------------------------------------------
+    def handle_event(self, event):
+        action = self.undo_key(event)
+        if action is not None:
+            self.undo() if action == "undo" else self.redo()
+            return True
+        if self.list.handle_event(event):
+            return True
+        for button in self.section_buttons + self.buttons + self.item_buttons:
+            if button.handle_event(event):
+                return True
+        before = self._signature()
+        handled = self._handle_editor(event)
+        if not handled:
+            return False
+        if not self._restoring and before != self._signature():
+            self.record("edit")
+            self.app.set_status("Script: change recorded ({})".format(
+                self.history.status()), W.DIM)
+        self._apply_editor()
+        return True
+
+    def _handle_editor(self, event):
+        order = ("speaker", "caption", "image", "text", "cp_id", "trigger",
+                 "value", "once", "line_speaker", "line_side", "line_image",
+                 "line_text")
+        for name in order:
+            if self.fields[name].handle_event(event):
+                return True
+        if self.line_list.handle_event(event):
+            self._on_line(None)
+            return True
+        for button in self.line_buttons:
+            if button.handle_event(event):
+                return True
+        return False
+
+    # -- drawing ------------------------------------------------------------
+    def draw(self):
+        self.ctx.canvas.fill((0, 0, 0))
+        self._draw_title("  -  {}".format(
+            self.current_level.get("name", "") if self.current_level else ""))
+        self.list.draw(self.ctx.canvas)
+        for button in self.buttons:
+            button.draw(self.ctx.canvas)
+        self._draw_history_status(L.LIST_X, L.LIST_HINT_Y, L.LIST_W)
+
+        for button in self.section_buttons:
+            button.draw(self.ctx.canvas)
+        self.item_list.draw(self.ctx.canvas)
+        for button in self.item_buttons:
+            button.draw(self.ctx.canvas)
+
+        if self.section == 3:
+            self._draw_checkpoint_editor()
+        else:
+            self._draw_slide_editor()
+
+    def _draw_slide_editor(self):
+        ctx = self.ctx
+        item = self._current_item()
+        for name in ("speaker", "caption", "image", "text"):
+            self.fields[name].draw(ctx.canvas)
+        if item is None:
+            _text(ctx, "select or add a slide", (EDITOR_X, L.BOTTOM - 40),
+                  W.DIM)
+            return
+        _text(ctx, "slide {} of {}".format(self.sel_index + 1,
+                                           len(self._section_items() or [])),
+              (EDITOR_X, self.slide_text_rect.bottom + 8), W.DIM)
+        _text(ctx, "image paths are relative to assets/ - "
+                   "leave empty for a text-only slide",
+              (EDITOR_X, self.slide_text_rect.bottom + 26), W.DIM)
+
+    def _draw_checkpoint_editor(self):
+        ctx = self.ctx
+        item = self._current_item()
+        for name in ("cp_id", "trigger", "value", "once"):
+            self.fields[name].draw(ctx.canvas)
+        _text(ctx, "value is used by: " + ", ".join(
+            DIALOGUE_TRIGGERS_NEEDING_VALUE),
+            (EDITOR_X, self.value_hint_y), W.DIM)
+        _text(ctx, "Lines", (EDITOR_X, self.lines_label_y))
+        self.line_list.draw(ctx.canvas)
+        for button in self.line_buttons:
+            button.draw(ctx.canvas)
+        for name in ("line_speaker", "line_side", "line_image", "line_text"):
+            self.fields[name].draw(ctx.canvas)
+        if item is None:
+            _text(ctx, "select or add a checkpoint",
+                  (EDITOR_X, self.line_text_rect.bottom + 12), W.DIM)
+            return
+        trigger = item.get("trigger", "")
+        if trigger in DIALOGUE_TRIGGERS_NEEDING_VALUE:
+            _text(ctx, "fires when {} {}".format(
+                trigger.replace("_", " "),
+                {"wave_start": "reaches the given wave number",
+                 "wave_cleared": "has cleared the given wave number",
+                 "kills": "reaches the given kill count",
+                 "gold_below": "drops below the given gold",
+                 "lives_below": "drops below the given lives"}[trigger]),
+              (EDITOR_X, self.line_text_rect.bottom + 12), W.DIM)
+        else:
+            _text(ctx, "fires on: {}".format(trigger.replace("_", " ")),
+                  (EDITOR_X, self.line_text_rect.bottom + 12), W.DIM)
+
+
+# Script tab geometry (module-level so build_fields can use it before init)
+SCRIPT_MID_X = 322
+SCRIPT_LIST_RECT = pygame.Rect(SCRIPT_MID_X, L.TOP + 34, 448, 350)
+ITEM_BTN_Y = SCRIPT_LIST_RECT.bottom + 8
+EDITOR_X = 790
+EDITOR_W = L.CANVAS_W - EDITOR_X - L.RIGHT_MARGIN
 
 
 # ===========================================================================
@@ -2088,13 +2893,17 @@ class HelpTab:
         self.lines = [
             "Big Tower - Level Designer",
             "",
-            "Tabs (top bar): Terrain | Units | Races | Levels | Help",
+            "Tabs (top bar): Terrain | Units | Races | Levels | Script | Help",
             "",
             "Lists are on the left; click a row to edit it.  New / Dup / Delete /",
             "Save act on the current list.  Undo / Redo sit under them, and",
             "Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) work anywhere on a tab.",
             "Save writes JSON to content/ and also keeps files tidy by removing",
             "deleted entries.  A '*' next to a tab title means unsaved changes.",
+            "",
+            "Text fields: hold an arrow key and the caret keeps moving (keys",
+            "repeat).  Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste; description",
+            "boxes are tall and take Enter for new lines.",
             "",
             "Undo: every mutating action (paint stroke, field edit, wave edit,",
             "resize, new/delete) stores the whole document as it was *before*",
@@ -2115,6 +2924,17 @@ class HelpTab:
             "  stroke.  Only the visible cells are drawn, so a 60x40 map",
             "  stays smooth.  'grid W' / 'grid H' resize the map.",
             "  A yellow line previews the route; NO PATH means unplayable.",
+            "  To route enemies yourself, click 'Edit path': left click/drag",
+            "  drops numbered waypoints (cyan line), right click removes one,",
+            "  'Auto path' refills from the automatic route and 'Clear path'",
+            "  hands control back to it.  A painted route overrides the auto",
+            "  search in the game.",
+            "",
+            "Script:  story writing.  Intro / outro slides play as a full-",
+            "  screen cutscene before and after a level; checkpoints pop the",
+            "  portrait dialogue box mid-battle (level start, wave N, N kills,",
+            "  gold/lives below N, hero summoned, victory, defeat).  Every",
+            "  slide and line takes a speaker, text and an image from assets/.",
             "",
             "Terrain:  a grid character maps to a base tile + optional overlay.",
             "  buildable = players may place defenders there.",

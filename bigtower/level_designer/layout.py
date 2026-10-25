@@ -86,16 +86,20 @@ SEL_H = BOTTOM - SEL_TOP                             # 112
 SEL_W = (MAP_W - 12) // 2                            # 276
 
 # right column, below the form
-WAVE_LABEL_Y = 248
-WAVE_LIST_RECT = pygame.Rect(LEVEL_FORM_X, 264, LEVEL_FORM_W, 124)
-WAVE_BTN_Y = 394
-GROUP_LABEL_Y = 426
-GROUP_LIST_RECT = pygame.Rect(LEVEL_FORM_X, 442, LEVEL_FORM_W, 118)
-GROUP_BTN_Y = 566
-GROUP_FIELD_Y = 598
+# (the level description is a 3-row multiline box, so the wave builder sits
+#  56px lower than it used to)
+WAVE_LABEL_Y = 304
+WAVE_LIST_RECT = pygame.Rect(LEVEL_FORM_X, 320, LEVEL_FORM_W, 124)
+WAVE_BTN_Y = 450
+GROUP_LABEL_Y = 482
+GROUP_LIST_RECT = pygame.Rect(LEVEL_FORM_X, 498, LEVEL_FORM_W, 118)
+GROUP_BTN_Y = 622
+GROUP_FIELD_Y = 654
 GROUP_FIELD_H = 26
 
 # --- Units tab: upgrade-branch editor --------------------------------------
-UNITS_UPGRADE_RECT = pygame.Rect(FORM_X, 460, 700, BOTTOM - 460)   # 330..1030
-UNITS_PREVIEW_RECT = pygame.Rect(FORM_X + 712, 460, 222, 190)     # 1042..1264
-UNITS_PREVIEW_HINT_Y = 658
+# (the unit description is a 3-row multiline box spanning rows 12..14, so the
+#  upgrade editor and sprite preview move down with it)
+UNITS_UPGRADE_RECT = pygame.Rect(FORM_X, 514, 700, BOTTOM - 514)   # 330..1030
+UNITS_PREVIEW_RECT = pygame.Rect(FORM_X + 712, 514, 222, 160)     # 1042..1264
+UNITS_PREVIEW_HINT_Y = 682

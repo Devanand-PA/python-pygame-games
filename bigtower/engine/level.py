@@ -53,9 +53,34 @@ class Level:
         self.spawn_cell = None
         self.base_cell = None
         self._parse()
-        self.path_cells = self._find_path()
+        # a designer-painted path (level["path"]) overrides the BFS route;
+        # anything invalid or absent silently falls back to the auto search
+        self.path_cells = self._custom_path(level_def) or self._find_path()
         self.waypoints = [self.cell_center(c) for c in self.path_cells]
         self.terrain = self._render_terrain()
+
+    def _custom_path(self, level_def):
+        """The designer's route: ``[[x, y], ...]`` grid cells, or None.
+
+        Every cell must be an in-bounds integer pair; consecutive duplicates
+        are dropped.  One bad entry invalidates the whole list, so a typo can
+        never produce a half-applied route.
+        """
+        raw = (level_def or {}).get("path")
+        if not isinstance(raw, list) or not raw:
+            return None
+        cells = []
+        for item in raw:
+            try:
+                x, y = int(item[0]), int(item[1])
+            except (TypeError, ValueError, IndexError):
+                return None
+            if not self.in_bounds(x, y):
+                return None
+            if cells and cells[-1] == (x, y):
+                continue
+            cells.append((x, y))
+        return cells or None
 
     # ---------------------------------------------------------------- load
     def _grid_rows(self, level_def):

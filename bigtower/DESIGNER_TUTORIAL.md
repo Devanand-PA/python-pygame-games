@@ -21,11 +21,12 @@ writes to disk**, so you never have to guess or read the Python source.
 8. [Units tab](#8-units-tab)
 9. [Races tab](#9-races-tab)
 10. [Levels tab](#10-levels-tab)
-11. [Setting sprite art](#11-setting-sprite-art)
-12. [Saving, undo and what lands on disk](#12-saving-undo-and-what-lands-on-disk)
-13. [Worked example: a new level](#13-worked-example-a-new-level)
-14. [Troubleshooting](#14-troubleshooting)
-15. [Where things live in the code](#15-where-things-live-in-the-code)
+11. [The Script tab](#11-the-script-tab)
+12. [Setting sprite art](#12-setting-sprite-art)
+13. [Saving, undo and what lands on disk](#13-saving-undo-and-what-lands-on-disk)
+14. [Worked example: a new level](#14-worked-example-a-new-level)
+15. [Troubleshooting](#15-troubleshooting)
+16. [Where things live in the code](#16-where-things-live-in-the-code)
 
 ---
 
@@ -43,14 +44,15 @@ python designer.py
 ```
 
 There is **no install step and no arguments required**. The designer opens a
-window titled *"Big Tower - Level Designer"* and shows five tabs across the top:
+window titled *"Big Tower - Level Designer"* and shows six tabs across the top:
 
 | Tab | What you edit |
 | --- | --- |
 | **Terrain** | The grid characters, their art, and their build/walk rules |
 | **Units** | Every defender ("tower") and attacker in the game |
 | **Races** | A campaign: which units it offers, which enemies it spawns, its hero |
-| **Levels** | The map grid, economy, shop, enemy pool and wave list |
+| **Levels** | The map grid, economy, shop, enemy pool, wave list and enemy route |
+| **Script** | Story dialogues and cutscenes (intro/outro slides, checkpoints) |
 | **Help** | A scrollable in-app cheat sheet |
 
 The status line at the **top-right of the tab bar** tells you what just happened
@@ -181,6 +183,10 @@ showing, your edits are discarded — **Save first.**
 | `Ctrl+S` | Anywhere | Save the **current tab**. |
 | `Ctrl+Z` | Anywhere | Undo the last change on the current tab. |
 | `Ctrl+Y` **or** `Ctrl+Shift+Z` | Anywhere | Redo. |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Focused text field | Copy / cut / paste the field's text. Uses the system clipboard when available, with a built-in fallback. Pasted text is filtered by the field (an int field keeps only digits). |
+| Arrow keys (held) | Focused text field | Move the caret; **holding a key repeats it** (same for Backspace/Delete and typing). |
+| `Enter` | Multiline field | Insert a new line (description boxes, Script text). |
+| `Up` / `Down` | Multiline field | Move between wrapped visual lines. |
 | `F11` | Anywhere | Toggle fullscreen. |
 | `Esc` | Normal mode | Quit the designer. |
 | `Esc` | Modal open | Close the modal (file browser, animation editor, dialog) and return to the editor. |
@@ -204,8 +210,8 @@ the per-tab tables easier to read.
 
 | Widget | How to use it | Help text |
 | --- | --- | --- |
-| **Text field** | Click to focus, type. Backspace deletes; arrow keys move the cursor. | Free text (a value with surrounding spaces is trimmed). |
-| **Int field** | Same, but only digits and a leading `-` are accepted. | Whole numbers only. Invalid characters are simply ignored as you type. |
+| **Text field** | Click to focus, type. Backspace deletes; arrow keys move the cursor. | **Click anywhere inside the text to drop the cursor there.** Only one box is focused at a time — clicking anything else (a button, a list, another tab) hands focus back. Hold an arrow key and it repeats. |
+| **Int field** | Same, but only digits and a leading `-` are accepted. | Whole numbers only. Invalid characters are simply ignored as you type — including pasted ones. |
 | **Float field** | Same, but digits, `.` and `-` are accepted. | Decimal numbers. |
 | **Checkbox** | Click to toggle. | On/off boolean. Click the row, not just the box. |
 | **Choice field** | Click to cycle to the next option. | A fixed set of allowed strings — click repeatedly to cycle. The current value is shown in the box. |
@@ -214,6 +220,7 @@ the per-tab tables easier to read.
 | **Image field** | Click to open the built-in file browser and pick a PNG. | A path relative to `assets/`, e.g. `units/foo/bar.png`. |
 | **Multi-select** | Click an item to tick/untick it. Wheel scrolls. | A checkbox list; the value is the list of ticked ids, in on-screen order. |
 | **Scroll list** | Click a row to select; wheel scrolls. Double-click is the same as one click. | A single-selection list. |
+| **Multiline field** | Click to focus; type; `Enter` adds a line; `Up`/`Down` move between wrapped lines. | A tall, word-wrapped text box used for descriptions and story text. Trailing whitespace is trimmed on save; leading blank lines are kept. |
 
 A ticked multi-select entry stores its **id**, so the JSON stays valid even if you
 later rename the entry's display name.
@@ -234,7 +241,7 @@ Entries live in `content/terrain.json` (one file holds all of them).
 | `id` | `id` | Unique identifier, e.g. `grass`. Do not change it casually — levels reference terrain by **character**, but other entries reference ids. |
 | `name` | `name` | Display name shown under the palette swatch in the Levels tab (truncated to 9 characters there). |
 | `grid char (1 char)` | `char` | The single character painted into the map grid. Only the first character is stored. Must be **unique** across all terrain, and must not be `S`, `B` or a space. |
-| `base kind` | `sprite.kind` or `base` | How the ground art is drawn. One of `pack`, `image`, `sheet`. See [Sprite art](#11-setting-sprite-art). |
+| `base kind` | `sprite.kind` or `base` | How the ground art is drawn. One of `pack`, `image`, `sheet`. See [Sprite art](#12-setting-sprite-art). |
 | `base tile` | `base` | Kenney tile number for `pack` kind. Shown in the base preview. |
 | `base png` | `sprite.path` | PNG path (relative to `assets/`) for `image` / `sheet` kinds. |
 | `base frame w` / `base frame h` | `sprite.frame_w` / `frame_h` | Pixel size of one frame in the sheet. Default `32`. |
@@ -385,7 +392,7 @@ glance.
 The large box at the bottom-left is the **live sprite preview**. It animates, and
 it is showing exactly what the game will draw with the current settings.
 
-Click it to open the sprite flow — see [Setting sprite art](#11-setting-sprite-art).
+Click it to open the sprite flow — see [Setting sprite art](#12-setting-sprite-art).
 The caption beneath reads `Sprite - click to change`, plus either
 `states: idle, walk, attack, death` for a full animation or
 `N frames @ F fps` / `static pack` for simpler art.
@@ -511,7 +518,7 @@ can define a new terrain and paint with it before saving.
 The line above the map reads:
 
 ```
-Map 40 x 20 cells   -   path OK
+Map 40x20 - 14 px/cell - path OK
 ```
 
 or, in **red**, `NO PATH from S to B`. A **yellow line** previews the computed
@@ -528,7 +535,7 @@ Buttons and readouts:
 | --- | --- |
 | `zoom -` / `zoom +` | Zoom out / in one step about the map centre. For trackpads without a wheel. |
 | `fit map` | Zoom and pan so the whole grid is visible again, and reset the scroll to the map origin. |
-| `<n> px / cell   -   <a>x<b> of <W>x<H>` | Current zoom and which portion of the map is visible. Green when the whole map fits, blue otherwise. |
+| Map readout (top line) | `Map 40x20 - 14 px/cell - path OK` on the left; the zoom level lives here. The right side repeats the input hints and, when the map does not fit, shows which portion is visible (`40x20 of 60x40`). |
 | Corner mini-map | When the map is larger than the panel, a small box in the bottom-right corner outlines the whole map and the current viewport in blue. |
 
 > **There is no "New Map", "Resize" or "Clear map" button.** To resize, type into
@@ -538,6 +545,33 @@ Buttons and readouts:
 >
 > Resizing **preserves** the cells that still fit and fills any new area with
 > grass. It is undoable.
+
+### The enemy route (custom path)
+
+By default enemies follow the **automatic route**: a breadth-first search from
+`S` to `B` over walkable cells (the yellow line). Three buttons next to the zoom
+controls let you route them yourself:
+
+| Control | Help text |
+| --- | --- |
+| `Edit path` | Toggle **path mode** (the button highlights while it is on). In path mode, **left click / drag drops numbered waypoints** and **right click removes the nearest one** (within a cell). Zoom, pan and palette picking keep working. |
+| `Auto path` | Replace the painted route with the automatic route's cells — a fast starting point you can then trim. |
+| `Clear path` | Wipe the painted route; enemies go back to the automatic route. |
+
+A painted route is drawn as a **cyan line with numbered dots** (enemies visit
+them in order), and the readout changes to `custom path (N waypoints)`. While a
+custom route exists the automatic route is irrelevant to the game — the red
+`NO PATH` warning and border apply only when you are *not* using one.
+
+**How it reaches the game:** the route is saved as the level's `path` key — a
+list of `[x, y]` grid cells. An empty `path` (every shipped level) means "use the
+automatic route". You can route across non-walkable tiles if you want; enemies
+walk straight between waypoints, so what you draw is what they walk. Waypoint
+editing participates in undo like any other map edit.
+
+> **Tip:** the route does not have to start at `S` or end at `B` — enemies walk
+> the waypoints in order and count as reaching the base when the route is
+> finished. Keeping the ends on `S` and `B` simply looks the most sensible.
 
 ### 10.5 Selecting the level's units
 
@@ -608,7 +642,68 @@ A reminder sits under the group fields:
 
 ---
 
-## 11. Setting sprite art
+## 11. The Script tab
+
+**Help text:** the Script tab writes a level's story. It has two kinds of
+content: **cutscenes** (full-screen slideshows before and after the level) and
+**checkpoints** (portrait dialogue boxes that pop up mid-battle).
+
+Everything is stored under the level's `script` key; levels without one play
+exactly as before.
+
+### Layout
+
+* **Left** — the level list; the script you edit belongs to the selected level.
+* **Middle** — four section buttons (**Intro slides**, **Outro: victory**,
+  **Outro: defeat**, **Checkpoints**) and the list of entries in the chosen
+  section, with `Add` / `Del` / `Dup` / `Up` / `Down`.
+* **Right** — the editor for the selected entry. `Save` / `Undo` / `Redo` are on
+  the far left, as on every tab.
+
+### Slides (intro / outro)
+
+Each slide shows a full screen when the cutscene plays:
+
+| Field | Help text |
+| --- | --- |
+| `speaker` | Name shown above the text (optional). |
+| `caption` | Small line shown at the top of the slide (optional). |
+| `image png` | Click `png` to browse `assets/` for the slide's picture; leave empty for a text-only slide. Shown letterboxed, aspect preserved. |
+| `text` | The body text — a tall box that wraps; `Enter` inserts a new line. |
+
+A cutscene runs before the level (`Intro slides`) or after it
+(`Outro: victory` when you win, `Outro: defeat` when you lose). Advance with
+click / Space / `→`; `Esc` skips the whole slideshow. A slide needs **text or an
+image** — Save refuses slides with neither.
+
+### Checkpoints (in-game dialogue)
+
+A checkpoint is a trigger plus a list of dialogue **lines**. When the trigger
+fires in the game, its lines play in the bottom portrait box (speaker image on
+the left or right per line's `side`, name above, wrapped text; click / Space
+advances, `Esc` skips).
+
+| Field | Help text |
+| --- | --- |
+| `id` | Unique within the level. Duplicates block the save. |
+| `trigger` | Click to cycle: `level_start`, `wave_start`, `wave_cleared`, `kills`, `gold_below`, `lives_below`, `hero_summoned`, `victory`, `defeat`. |
+| `value` | Only used by `wave_start` / `wave_cleared` (wave number N), `kills` (kill count reaches N), `gold_below` / `lives_below` (stat drops below N). The editor prints exactly when your trigger fires. |
+| `only once` | Tick (default) to fire a single time; untick to re-arm — continuous triggers (`kills`, `gold_below`, `lives_below`) fire again each time the value is *crossed* again. |
+| Lines | `Add line` / `Del line` / `Up` / `Down`; each line has a speaker, `side` (`left`/`right`), an image, and text. A checkpoint with no lines cannot be saved. |
+
+`victory` / `defeat` checkpoints play **before** the matching outro slides, so
+you can have the characters react and then roll the closing slideshow.
+
+### Saving and validation
+
+`Save` validates every level's script and refuses to write anything while a
+problem remains — duplicate checkpoint ids, negative `value`, checkpoints with
+no lines, lines with empty text, or slides with neither text nor image. The
+first problem shows on the status line. Fix it and save again.
+
+---
+
+## 12. Setting sprite art
 
 The art flow is identical on the **Units** and **Terrain** tabs.
 
@@ -684,7 +779,7 @@ You can hand-edit any of these in JSON; the designer reads them back losslessly.
 
 ---
 
-## 12. Saving, undo and what lands on disk
+## 13. Saving, undo and what lands on disk
 
 ### What Save does
 
@@ -735,7 +830,7 @@ unsaved.
 
 ---
 
-## 13. Worked example: a new level
+## 14. Worked example: a new level
 
 1. **Save your units first.** On the **Units** tab, create or adjust any defenders
    and attackers you need, then **Save**.
@@ -768,14 +863,18 @@ unsaved.
 
 ---
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
 | `ERROR: duplicate ids - not saved` | Two entries share an `id`. Rename one, then save again. |
 | `ERROR: duplicate level ids - not saved` | Same, on the Levels tab. |
 | `ERROR: terrain chars must be unique and not S/B` | Two terrains share a `char`, or one uses `S`, `B` or a space. These are reserved. |
-| `NO PATH from S to B` (red) | No walkable route between spawn and base. Check `walkable` flags and that both `S` and `B` are actually painted. |
+| `NO PATH from S to B` (red) | No walkable route between spawn and base. Check `walkable` flags and that both `S` and `B` are actually painted. Only shown while no custom path exists — a painted route overrides it. |
+| Enemies ignore my painted route | Make sure you actually **saved** the level after painting (`Edit path` mode edits are saved with the level, not live in the game). An empty route or a `Clear path` means "use the automatic route". |
+| My painted route looks wrong in the game | Enemies walk **straight between waypoints in order** — the route is not re-searched around walls. Re-paint it, or click `Auto path` and trim. |
+| A dialogue never fires | Check the trigger's `value` (e.g. `wave_start 4` needs a wave 4 to exist) and that the checkpoint's level is the one you are playing. The Script tab prints exactly when each trigger fires. |
+| `ERROR: checkpoint ... duplicate id` / `has no dialogue lines` | The Script tab's Save validates all levels' stories. Fix the named checkpoint and save again. |
 | A tab shows `*` but I did not change anything | The dirty marker compares against the last save. Save (or `Ctrl+Z`) to clear it. |
 | My edits vanished after switching tabs | You never pressed **Save**. Content is only written on Save. |
 | `--fullscreen` did nothing | You may have misspelled it, or you were already in fullscreen. Unknown flags are silently ignored — press **F11** instead. |
@@ -787,7 +886,7 @@ unsaved.
 
 ---
 
-## 15. Where things live in the code
+## 16. Where things live in the code
 
 Useful if you want to extend the designer:
 
@@ -795,8 +894,8 @@ Useful if you want to extend the designer:
 | --- | --- |
 | `designer.py` | The entry point. Adds the repo root to `sys.path` and calls `level_designer.app.main`. |
 | `level_designer/app.py` | `Designer` (window, tab bar, main loop), the `--fullscreen` flag, and every global hotkey. |
-| `level_designer/tabs.py` | All five tabs: `TerrainTab`, `UnitsTab`, `RacesTab`, `MapCanvas`, `LevelsTab`, `HelpTab`, plus the shared `FormTab` / `UndoMixin`. |
-| `level_designer/widgets.py` | The widget toolkit: fields, lists, `MultiSelect`, `UpgradePathEditor`, `FileBrowser`, `AnimationEditor` and the sprite flows. |
+| `level_designer/tabs.py` | All six tabs: `TerrainTab`, `UnitsTab`, `RacesTab`, `MapCanvas`, `LevelsTab`, `ScriptTab` and `HelpTab`, plus the shared `FormTab` / `UndoMixin`. |
+| `level_designer/widgets.py` | The widget toolkit: fields (with copy/paste and `MultilineField`), lists, `MultiSelect`, `UpgradePathEditor`, `FileBrowser`, `AnimationEditor` and the sprite flows. |
 | `level_designer/layout.py` | Every rectangle on the 1280×720 canvas, so no widget can drift out of place. |
 | `level_designer/history.py` | The snapshot undo/redo stacks (50 steps). |
 | `core/content.py` | `ContentDB` — loading, saving and orphan pruning for `content/`. |

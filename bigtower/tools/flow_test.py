@@ -903,11 +903,11 @@ def main():
         designer._dispatch(pygame.event.Event(
             pygame.MOUSEBUTTONDOWN, {"pos": pos, "button": 1}))
 
-    check("designer opens five tabs", len(designer.tabs) == 5,
+    check("designer opens six tabs", len(designer.tabs) == 6,
           str([n for n, _ in designer.tabs]))
     for i, btn in enumerate(designer.tab_buttons):
         click(btn.rect)
-    check("designer tab bar switches tabs", designer.active == 4)
+    check("designer tab bar switches tabs", designer.active == 5)
 
     # terrain: selecting a different row edits that entry
     designer.set_tab(0)

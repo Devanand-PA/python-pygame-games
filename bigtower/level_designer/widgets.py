@@ -33,6 +33,10 @@ class Ctx:
         self.fonts = fonts
         self.modal = None
         self.status = ""
+        # The one field allowed to show a caret.  Text fields claim it on
+        # focus; the app clears it when a click lands anywhere else, so two
+        # boxes can never look focused at once.
+        self.focus_owner = None
 
     def play(self, *args, **kwargs):    # widgets call this; designer is silent
         pass
@@ -57,6 +61,23 @@ class Field:
         self.label = label
         self.label_w = label_w if label_w is not None else self.label_w
         self.focused = False
+
+    # -- focus bookkeeping ---------------------------------------------------
+    def _claim_focus(self):
+        """Become the app's one focused field, defocusing the previous one."""
+        prev = getattr(self.ctx, "focus_owner", None)
+        if prev is not None and prev is not self \
+                and getattr(prev, "focused", False):
+            prev.focused = False
+        self.ctx.focus_owner = self
+
+    @staticmethod
+    def defocus_owner(ctx):
+        """Drop the current focus owner (used when a click lands elsewhere)."""
+        owner = getattr(ctx, "focus_owner", None)
+        if owner is not None:
+            owner.focused = False
+            ctx.focus_owner = None
 
     @property
     def box_rect(self):
@@ -87,17 +108,93 @@ def _draw_box(canvas, rect, focused):
 # ---------------------------------------------------------------------------
 # text / number fields
 # ---------------------------------------------------------------------------
+# Clipboard: prefer the system clipboard via pygame.scrap, fall back to an
+# in-process string so copy/paste always works (headless, odd platforms,
+# uninitialised scrap -- none of that may ever raise).
+_CLIPBOARD = ""          # internal fallback clipboard
+_SCRAP_TRIED = False
+
+
+def _scrap_put(text):
+    """Copy *text* to the system clipboard; True on success."""
+    global _SCRAP_TRIED, _CLIPBOARD
+    _CLIPBOARD = text
+    try:
+        import pygame.scrap
+        if not pygame.scrap.get_init():
+            pygame.scrap.init()
+        pygame.scrap.put_text(text)
+        return True
+    except Exception:                                  # noqa: BLE001
+        return False
+    finally:
+        _SCRAP_TRIED = True
+
+
+def _scrap_get():
+    """Read the system clipboard, falling back to the internal one."""
+    global _CLIPBOARD
+    try:
+        import pygame.scrap
+        if pygame.scrap.get_init():
+            text = pygame.scrap.get_text()
+            if text:
+                return text
+    except Exception:                                  # noqa: BLE001
+        pass
+    return _CLIPBOARD
+
+
+def wrap_text(text, font, max_width):
+    """Word-wrap ``text`` to ``font``; returns a list of lines (never empty).
+
+    Honours explicit ``\\n`` paragraph breaks.  Used by the multiline field and
+    by anywhere else that needs to draw flowing text.
+    """
+    lines = []
+    for paragraph in str(text).split("\n"):
+        words = paragraph.split()
+        if not words:
+            lines.append("")
+            continue
+        current = words[0]
+        for word in words[1:]:
+            trial = f"{current} {word}"
+            if font.size(trial)[0] <= max_width:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+    return lines or [""]
+
+
 class TextField(Field):
-    def __init__(self, ctx, rect, label="", value="", label_w=None, allow="all"):
+    """A single- or multi-line text box with copy/paste.
+
+    Keyboard (while focused): arrows move the caret (holding repeats, thanks
+    to the app-wide ``pygame.key.set_repeat``), Home/End jump, Backspace and
+    Delete edit, ``Ctrl+C`` / ``Ctrl+X`` / ``Ctrl+V`` copy, cut and paste.
+    Multiline fields also accept Enter (newline) and Up/Down to move between
+    *visual* (wrapped) lines.
+    """
+
+    REPEAT_NOTE = "key repeat comes from pygame.key.set_repeat in app.py"
+
+    def __init__(self, ctx, rect, label="", value="", label_w=None,
+                 allow="all", multiline=False):
         super().__init__(ctx, rect, label, label_w)
         self.allow = allow               # all | int | float
+        self.multiline = bool(multiline)
         self.text = "" if value is None else str(value)
         self.cursor = len(self.text)
+        self.scroll_line = 0             # first visible visual line (multiline)
 
     # -- value --------------------------------------------------------------
     def set_value(self, value):
         self.text = "" if value is None else str(value)
-        self.cursor = len(self.text)
+        self.cursor = len(self.text)     # fresh text -> caret at its end
+        self.scroll_line = 0
 
     @property
     def value(self):
@@ -110,12 +207,145 @@ class TextField(Field):
             return ch.isdigit() or ch in ".-"
         return True
 
+    def _insert(self, chunk):
+        """Insert *chunk* at the caret, honouring the field's char filter."""
+        kept = ""
+        for ch in chunk:
+            if ch == "\n":
+                if self.multiline:
+                    kept += ch
+            elif self._accepts(ch):
+                kept += ch
+        if not kept:
+            return
+        self.text = self.text[:self.cursor] + kept + self.text[self.cursor:]
+        self.cursor += len(kept)
+
+    # -- clipboard ----------------------------------------------------------
+    def _copy(self):
+        return _scrap_put(self.text)
+
+    def _cut(self):
+        self._copy()
+        self.text = ""
+        self.cursor = 0
+
+    def _paste(self):
+        self._insert(_scrap_get())
+
+    # -- visual-line mapping (multiline) ------------------------------------
+    def _visual_lines(self):
+        """[(line_text, start_index_in_text), ...] for the wrapped display."""
+        font = self.ctx.fonts["small"]
+        width = max(10, self.box_rect.width - 10)
+        out = []
+        start = 0
+        for paragraph in self.text.split("\n"):
+            words = paragraph.split()
+            if not words:
+                out.append(("", start))            # empty (blank) line
+                start += 1                          # the "\n"
+                continue
+            pos = start
+            current = ""
+            for word in words:
+                trial = word if not current else f"{current} {word}"
+                if current and font.size(trial)[0] > width:
+                    out.append((current, pos))
+                    pos += len(current) + 1        # + the joining space
+                    current = word
+                else:
+                    current = trial
+            out.append((current, pos))
+            start = pos + len(current) + 1         # + the "\n"
+        return out or [(" ", 0)]
+
+    def _line_of_cursor(self, lines):
+        for index in range(len(lines)):
+            line_text, line_start = lines[index]
+            end = line_start + len(line_text)
+            # a caret sitting on the wrap boundary belongs to the earlier line
+            if index + 1 < len(lines) and self.cursor == end + 1 \
+                    and lines[index + 1][1] == end + 1:
+                continue
+            if line_start <= self.cursor <= end:
+                return index
+        return len(lines) - 1
+
+    def _move_line(self, step):
+        lines = self._visual_lines()
+        index = self._line_of_cursor(lines)
+        target = max(0, min(len(lines) - 1, index + step))
+        if target == index:
+            return
+        line_text, line_start = lines[target]
+        col = self.cursor - lines[index][1]
+        self.cursor = min(line_start + len(line_text), line_start + max(0, col))
+
+    # -- events -------------------------------------------------------------
+    def _caret_from_click(self, pos):
+        """Put the caret at the character the user clicked on."""
+        box = self.box_rect
+        font = self.ctx.fonts["small"]
+        char_w = max(1, font.size("M")[0])
+        if not self.multiline:
+            dx = pos[0] - (box.x + 5)
+            # mirror the draw scissor: it keeps the *caret's* prefix inside
+            # the box, so exactly the characters on screen are hit-testable
+            start = 0
+            while (start < self.cursor
+                   and font.size(self.text[start:self.cursor])[0]
+                   > box.width - 10):
+                start += 1
+            best, best_d = start, None
+            for i in range(start, len(self.text) + 1):
+                d = abs(font.size(self.text[start:i])[0] - dx)
+                if best_d is None or d < best_d:
+                    best, best_d = i, d
+                if font.size(self.text[start:i])[0] - dx > char_w:
+                    break
+            self.cursor = best
+            return
+        lines = self._visual_lines()
+        line_h = font.get_height() + 3
+        max_lines = max(1, (box.height - 8) // line_h)
+        row = self.scroll_line + int((pos[1] - (box.y + 4)) // line_h)
+        row = max(0, min(len(lines) - 1, row))
+        line_text, line_start = lines[row]
+        dx = max(0, pos[0] - (box.x + 5))
+        best, best_d = 0, None
+        for i in range(len(line_text) + 1):
+            d = abs(font.size(line_text[:i])[0] - dx)
+            if best_d is None or d < best_d:
+                best, best_d = i, d
+            if font.size(line_text[:i])[0] - dx > char_w:
+                break
+        self.cursor = line_start + best
+        # keep the clicked line on screen (same clamp the draw path applies)
+        if row < self.scroll_line:
+            self.scroll_line = row
+        elif row >= self.scroll_line + max_lines:
+            self.scroll_line = row - max_lines + 1
+
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.focused = self.box_rect.collidepoint(event.pos)
+            if self.focused:
+                self._claim_focus()
+                self._caret_from_click(event.pos)
             return self.focused
         if event.type != pygame.KEYDOWN or not self.focused:
             return False
+        ctrl = bool(event.mod & pygame.KMOD_CTRL)
+
+        if ctrl and event.key in (pygame.K_c, pygame.K_x, pygame.K_v):
+            if event.key == pygame.K_c:
+                self._copy()
+            elif event.key == pygame.K_x:
+                self._cut()
+            else:
+                self._paste()
+            return True
         if event.key == pygame.K_BACKSPACE:
             if self.cursor > 0:
                 self.text = self.text[:self.cursor - 1] + self.text[self.cursor:]
@@ -126,32 +356,99 @@ class TextField(Field):
             self.cursor = max(0, self.cursor - 1)
         elif event.key == pygame.K_RIGHT:
             self.cursor = min(len(self.text), self.cursor + 1)
+        elif event.key == pygame.K_UP and self.multiline:
+            self._move_line(-1)
+        elif event.key == pygame.K_DOWN and self.multiline:
+            self._move_line(1)
+        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and self.multiline:
+            self._insert("\n")
         elif event.key == pygame.K_HOME:
-            self.cursor = 0
+            if self.multiline:
+                lines = self._visual_lines()
+                self.cursor = lines[self._line_of_cursor(lines)][1]
+            else:
+                self.cursor = 0
         elif event.key == pygame.K_END:
-            self.cursor = len(self.text)
+            if self.multiline:
+                lines = self._visual_lines()
+                index = self._line_of_cursor(lines)
+                self.cursor = lines[index][1] + len(lines[index][0])
+            else:
+                self.cursor = len(self.text)
         elif event.unicode and event.unicode.isprintable() and self._accepts(event.unicode):
-            self.text = self.text[:self.cursor] + event.unicode + self.text[self.cursor:]
-            self.cursor += 1
+            self._insert(event.unicode)
         else:
             return True
         return True
+
+    # -- drawing ------------------------------------------------------------
+    def _draw_single_line(self, canvas, box, font):
+        text = self.text
+        # keep the caret visible: drop characters from the left while the
+        # prefix up to the caret would overflow, then scissor the right side
+        start = 0
+        while start < self.cursor and \
+                font.size(text[start:self.cursor])[0] > box.width - 10:
+            start += 1
+        shown = text[start:]
+        while shown and font.size(shown)[0] > box.width - 10:
+            shown = shown[:-1]
+        surf = font.render(shown, True, TEXT)
+        canvas.blit(surf, (box.x + 5, box.centery - surf.get_height() // 2))
+        if self.focused and (pygame.time.get_ticks() % 1000) < 550:
+            cx = min(box.right - 5,
+                     box.x + 5 + font.size(text[start:self.cursor])[0])
+            pygame.draw.line(canvas, FIELD_FOCUS, (cx, box.y + 3),
+                             (cx, box.bottom - 3), 2)
+
+    def _draw_multiline(self, canvas, box, font):
+        lines = self._visual_lines()
+        line_h = font.get_height() + 3
+        max_lines = max(1, (box.height - 8) // line_h)
+        # vertical scroll: keep the caret's line on screen
+        index = self._line_of_cursor(lines)
+        if index < self.scroll_line:
+            self.scroll_line = index
+        elif index >= self.scroll_line + max_lines:
+            self.scroll_line = index - max_lines + 1
+        self.scroll_line = max(0, min(self.scroll_line, max(0, len(lines) - max_lines)))
+        y = box.y + 4
+        for line_text, _start in lines[self.scroll_line:self.scroll_line + max_lines]:
+            if line_text:
+                surf = font.render(line_text, True, TEXT)
+                canvas.blit(surf, (box.x + 5, y))
+            y += line_h
+        if self.focused and (pygame.time.get_ticks() % 1000) < 550:
+            line_text, line_start = lines[index]
+            col = max(0, min(len(line_text), self.cursor - line_start))
+            cx = min(box.right - 5,
+                     box.x + 5 + font.size(line_text[:col])[0])
+            cy = box.y + 4 + (index - self.scroll_line) * line_h
+            pygame.draw.line(canvas, FIELD_FOCUS, (cx, cy),
+                             (cx, min(box.bottom - 3, cy + font.get_height())), 2)
 
     def draw(self, canvas):
         self._draw_label(canvas)
         box = self.box_rect
         _draw_box(canvas, box, self.focused)
         font = self.ctx.fonts["small"]
-        shown = self.text
-        while shown and font.size(shown)[0] > box.width - 10:
-            shown = shown[1:]
-        surf = font.render(shown, True, TEXT)
-        canvas.blit(surf, (box.x + 5, box.centery - surf.get_height() // 2))
-        if self.focused and (pygame.time.get_ticks() % 1000) < 550:
-            cx = box.x + 5 + font.size(self.text[:self.cursor] if not shown or shown == self.text
-                                       else self.text[-len(shown):][:max(0, self.cursor - (len(self.text) - len(shown)))])[0]
-            pygame.draw.line(canvas, FIELD_FOCUS, (cx, box.y + 3),
-                             (cx, box.bottom - 3), 2)
+        if self.multiline:
+            self._draw_multiline(canvas, box, font)
+        else:
+            self._draw_single_line(canvas, box, font)
+
+
+class MultilineField(TextField):
+    """A TextField that wraps, grows tall and accepts Enter for newlines."""
+
+    def __init__(self, ctx, rect, label="", value="", label_w=None):
+        super().__init__(ctx, rect, label, value, label_w, multiline=True)
+
+    @property
+    def value(self):
+        # keep leading newlines/indent (they are content here); trim only the
+        # trailing whitespace the caret tends to leave behind
+        return self.text.rstrip()
 
 
 class IntField(TextField):

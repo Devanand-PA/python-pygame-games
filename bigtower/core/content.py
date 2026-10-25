@@ -448,6 +448,176 @@ RACE_DEFAULT = {
     "hero": None,            # defender unit id summoned when the base is hit
 }
 
+# ===========================================================================
+# story scripting: intro/outro cutscenes + in-game dialogue checkpoints
+# ===========================================================================
+# A level may carry a ``script`` dict:
+#
+#     "script": {
+#         "intro":  {"slides": [<slide>, ...]},
+#         "outro":  {"victory": [<slide>, ...], "defeat": [<slide>, ...]},
+#         "checkpoints": [<checkpoint>, ...],
+#     }
+#
+# A *slide* (full-screen cutscene panel) is::
+#     {"image": "dialogue/foo.png" | null,   # path relative to assets/
+#      "speaker": "Name" | "", "caption": "" | "", "text": "..."}
+#
+# A *checkpoint* (in-game portrait dialogue) is::
+#     {"id": "unique-id", "trigger": <one of SCRIPT_TRIGGERS>,
+#      "value": <int, only for the value triggers>, "once": true,
+#      "lines": [{"image": ...|null, "speaker": "...", "text": "...",
+#                 "side": "left" | "right"}]}
+#
+# Triggers fire on GameScene state:
+#     level_start    -- the level begins (after any intro slides)
+#     wave_start     -- wave number `value` starts (value <= 0 means "every
+#                       wave start" only if once is false; the common case is
+#                       value = N for the Nth wave)
+#     wave_cleared   -- wave number `value` is cleared (value = N for Nth)
+#     kills          -- session_kills >= value
+#     gold_below     -- gold < value (checked after income/awards)
+#     lives_below    -- lives < value (checked after a leak)
+#     hero_summoned  -- the base hero is called into the field
+#     victory        -- the level is won (before outro slides)
+#     defeat         -- the level is lost (before outro slides)
+#
+# Everything here is optional; a level without a ``script`` key behaves exactly
+# as before (see normalize_script, which tolerates absent or broken data).
+SCRIPT_TRIGGERS = ("level_start", "wave_start", "wave_cleared", "kills",
+                   "gold_below", "lives_below", "hero_summoned", "victory",
+                   "defeat")
+DIALOGUE_TRIGGERS_NEEDING_VALUE = ("wave_start", "wave_cleared", "kills",
+                                   "gold_below", "lives_below")
+SCRIPT_LINE_KEYS = ("image", "speaker", "text", "side", "caption")
+SCRIPT_SIDES = ("left", "right")
+
+
+def _script_text(value):
+    """Coerce anything to a clean string (None -> "")."""
+    return "" if value is None else str(value)
+
+
+def _script_slide(raw):
+    """Tolerantly convert one raw slide into the canonical shape."""
+    if not isinstance(raw, dict):
+        return None
+    image = raw.get("image")
+    if image is not None:
+        image = _script_text(image).strip() or None
+    return {"image": image,
+            "speaker": _script_text(raw.get("speaker")).strip(),
+            "caption": _script_text(raw.get("caption")).strip(),
+            "text": _script_text(raw.get("text"))}
+
+
+def _script_line(raw):
+    """Tolerantly convert one raw dialogue line into the canonical shape."""
+    if not isinstance(raw, dict):
+        return None
+    image = raw.get("image")
+    if image is not None:
+        image = _script_text(image).strip() or None
+    side = _script_text(raw.get("side")).strip().lower()
+    if side not in SCRIPT_SIDES:
+        side = "left"
+    return {"image": image,
+            "speaker": _script_text(raw.get("speaker")).strip(),
+            "text": _script_text(raw.get("text")),
+            "side": side}
+
+
+def _script_slide_list(raw):
+    slides = raw.get("slides") if isinstance(raw, dict) else raw
+    if not isinstance(slides, list):
+        return []
+    return [s for s in (_script_slide(item) for item in slides)
+            if s is not None]
+
+
+def script_default():
+    """A fresh, empty script dict (what the designer starts from)."""
+    return {"intro": [], "outro": {"victory": [], "defeat": []},
+            "checkpoints": []}
+
+
+def normalize_script(raw):
+    """Turn anything (absent, None, garbage) into a valid script dict.
+
+    Never raises; drops malformed slides/lines/checkpoints so one bad entry
+    cannot break a whole level.  Checkpoints keep their raw ``value`` (any
+    number-ish content is coerced to int, defaulting to 0).
+    """
+    if not isinstance(raw, dict):
+        return script_default()
+    script = script_default()
+    script["intro"] = _script_slide_list(raw.get("intro"))
+    outro = raw.get("outro")
+    outro = outro if isinstance(outro, dict) else {}
+    script["outro"]["victory"] = _script_slide_list(outro.get("victory"))
+    script["outro"]["defeat"] = _script_slide_list(outro.get("defeat"))
+
+    checkpoints = []
+    raw_checks = raw.get("checkpoints")
+    if isinstance(raw_checks, list):
+        for item in raw_checks:
+            if not isinstance(item, dict):
+                continue
+            raw_lines = item.get("lines")
+            lines = [] if not isinstance(raw_lines, list) else [
+                ln for ln in (_script_line(ln) for ln in raw_lines)
+                if ln is not None]
+            try:
+                value = int(item.get("value") or 0)
+            except (TypeError, ValueError):
+                value = 0
+            cid = _script_text(item.get("id")).strip() or "checkpoint"
+            trigger = _script_text(item.get("trigger")).strip()
+            if trigger not in SCRIPT_TRIGGERS:
+                trigger = "level_start"
+            checkpoints.append({"id": cid, "trigger": trigger, "value": value,
+                                "once": bool(item.get("once", True)),
+                                "lines": lines})
+    script["checkpoints"] = checkpoints
+    return script
+
+
+def level_script(level):
+    """The normalized script for a level dict (or None-ish input)."""
+    if not isinstance(level, dict):
+        return script_default()
+    return normalize_script(level.get("script"))
+
+
+def validate_script(level):
+    """Human-readable problems with a level's script; empty list == OK."""
+    problems = []
+    script = level_script(level)
+    seen_ids = set()
+    for index, cp in enumerate(script["checkpoints"]):
+        where = f"checkpoint {index + 1} ({cp['id']})"
+        if cp["id"] in seen_ids:
+            problems.append(f"{where}: duplicate id '{cp['id']}'")
+        seen_ids.add(cp["id"])
+        if cp["trigger"] not in SCRIPT_TRIGGERS:
+            problems.append(f"{where}: unknown trigger '{cp['trigger']}'")
+        if cp["trigger"] in DIALOGUE_TRIGGERS_NEEDING_VALUE and cp["value"] < 0:
+            problems.append(f"{where}: value must be >= 0")
+        if not cp["lines"]:
+            problems.append(f"{where}: has no dialogue lines")
+        for ln_index, line in enumerate(cp["lines"]):
+            if not line["text"].strip():
+                problems.append(f"{where}: line {ln_index + 1} has empty text")
+    for name, slides in (("intro", script["intro"]),
+                         ("outro/victory", script["outro"]["victory"]),
+                         ("outro/defeat", script["outro"]["defeat"])):
+        for index, slide in enumerate(slides):
+            if not slide["text"].strip() and not slide["image"]:
+                problems.append(f"{name} slide {index + 1}: has neither text "
+                                f"nor image")
+    return problems
+
+
 LEVEL_DEFAULT = {
     "id": "level",
     "race": "race",
@@ -461,8 +631,10 @@ LEVEL_DEFAULT = {
     "available_units": [],   # subset of the race units; empty -> all race units
     "enemy_pool": [],        # subset of the race enemies; empty -> all
     "waves": [],             # [[[unit_id, count, interval], ...], ...]
+    "path": [],              # [[x, y], ...] designer route; empty -> auto BFS
     "map": "",               # legacy .txt fallback when grid is empty
     "order": 0,
+    "script": None,          # story scripting (see normalize_script above)
 }
 
 

@@ -8,11 +8,12 @@ towers, and mobile defenders (like the Scorpion) walk after the enemy.
 import pygame
 
 from core import settings as S
-from core.content import get_content
+from core.content import get_content, level_script
 from core.scene import Scene
 from engine import art
 from engine import stats_panel
 from engine.camera import Camera
+from engine.dialogue import Cutscene, DialogueBox
 from engine.level import Level
 from engine.projectiles import Effects, Projectile
 from engine.units import Unit
@@ -109,6 +110,18 @@ class GameScene(Scene):
 
         self._make_hud()
 
+        # --- story scripting (cutscenes + checkpoint dialogues) -------------
+        # A level without a "script" key normalizes to an empty script, so
+        # every hook below is a no-op for the shipped content.
+        self.script = level_script(self.level_def)
+        self._fired_checkpoints = set()   # checkpoint ids already shown
+        self._pending_lines = []          # queued line lists for DialogueBox
+        self._pending_outro = None        # ("victory"|"defeat", slides)
+        self._prev_kills = 0              # for crossing detection
+        self._prev_gold = float(self.gold)
+        self._prev_lives = self.lives
+        self._start_story()
+
     # ================================================================= HUD
     def _make_hud(self):
         self.hud_rect = pygame.Rect(0, S.CANVAS_H - S.HUD_H, S.CANVAS_W, S.HUD_H)
@@ -162,15 +175,19 @@ class GameScene(Scene):
         self.spawn_queue.sort(key=lambda item: item[0])
         self.countdown = 0.0
         self.game.play("wave", 0.5)
+        self._fire_checkpoint_trigger("wave_start", self.wave_number)
 
     def _wave_cleared(self):
         bonus = 20 + self.wave_number * 5
         self.gold += bonus
         self.gold_earned += bonus
+        self._fire_checkpoint_trigger("wave_cleared", self.wave_number)
         if self.wave_number >= len(self.waves):
             self.state = "won"
             self.game.play("victory", 0.6)
             self.finishbattle(record_victory=True)
+            self._fire_checkpoint_trigger("victory")
+            self._queue_outro("victory")
         else:
             self.state = "build"
             self.countdown = S.WAVE_COUNTDOWN
@@ -239,6 +256,108 @@ class GameScene(Scene):
         if self.state == "wave" and not self.spawn_queue and not self.attackers:
             self._wave_cleared()
 
+        self._update_script()
+
+    # ============================================================== scripting
+    # Story hooks: an empty script makes every method here a no-op, so levels
+    # without a "script" key behave exactly as they did before.
+    def _start_story(self):
+        """Play the intro cutscene, then level_start checkpoints."""
+        intro = self.script.get("intro") or []
+        if intro:
+            self.push_overlay(Cutscene(self.game, intro,
+                                       on_done=self._on_intro_done))
+        else:
+            self._started = True
+            self._fire_checkpoint_trigger("level_start")
+
+    def _on_intro_done(self):
+        self._started = True
+        self._fire_checkpoint_trigger("level_start")
+
+    def _update_script(self):
+        """Evaluate the continuous triggers (kills / gold_below / lives_below).
+
+        They fire on *crossing* the threshold rather than while it holds, so a
+        ``once``-less checkpoint re-arms cleanly instead of re-firing every
+        frame.  Event triggers (wave_start, wave_cleared, victory, ...) fire
+        from the code paths that cause them.
+        """
+        for cp in self.script.get("checkpoints", []):
+            trigger = cp.get("trigger")
+            if trigger not in ("kills", "gold_below", "lives_below"):
+                continue
+            value = cp.get("value", 0)
+            cid = cp.get("id") or f"{trigger}@{value}"
+            if cid in self._fired_checkpoints and cp.get("once", True):
+                continue
+            if trigger == "kills" and self._prev_kills < value <= self.session_kills:
+                self._fire_checkpoint_trigger("kills", value)
+            elif (trigger == "gold_below"
+                    and self._prev_gold >= value > self.gold):
+                self._fire_checkpoint_trigger("gold_below", value)
+            elif (trigger == "lives_below"
+                    and self._prev_lives >= value > self.lives):
+                self._fire_checkpoint_trigger("lives_below", value)
+        self._prev_kills = self.session_kills
+        self._prev_gold = self.gold
+        self._prev_lives = self.lives
+
+    def _fire_checkpoint_trigger(self, trigger, value=None):
+        """Queue dialogue for every matching checkpoint; returns True if any
+        dialogue was pushed.  ``value`` (when given) must equal the
+        checkpoint's ``value``."""
+        pushed = False
+        for cp in self.script.get("checkpoints", []):
+            if cp.get("trigger") != trigger:
+                continue
+            if value is not None and cp.get("value", 0) != value:
+                continue
+            cid = cp.get("id") or f"{trigger}@{value}"
+            if cid in self._fired_checkpoints and cp.get("once", True):
+                continue
+            lines = [ln for ln in cp.get("lines", []) if ln]
+            if not lines:
+                self._fired_checkpoints.add(cid)     # nothing to show
+                continue
+            if self._show_dialogue(lines):
+                pushed = True
+            if cp.get("once", True):
+                self._fired_checkpoints.add(cid)
+        return pushed
+
+    def _show_dialogue(self, lines):
+        """Push a DialogueBox for one checkpoint's lines (never empty)."""
+        lines = [ln for ln in lines if ln and (ln.get("text") or "").strip()]
+        if not lines:
+            return False
+        self.push_overlay(DialogueBox(self.game, lines,
+                                      on_finish=self._on_dialogue_done))
+        return True
+
+    def _on_dialogue_done(self):
+        """A dialogue closed: show the next queued one, else any outro."""
+        if self._pending_lines:
+            self._show_dialogue(self._pending_lines.pop(0))
+        elif self._pending_outro is not None:
+            self._play_outro()
+
+    def _queue_outro(self, kind):
+        """Remember the victory/defeat slides; play them after any dialogue."""
+        slides = (self.script.get("outro") or {}).get(kind) or []
+        self._pending_outro = (kind, slides) if slides else None
+        if self._pending_outro is not None and not self.game.subscenes:
+            self._play_outro()
+
+    def _play_outro(self):
+        pending = self._pending_outro
+        self._pending_outro = None
+        if pending is None:
+            return
+        _kind, slides = pending
+        self.push_overlay(Cutscene(self.game, slides,
+                                   on_done=self._on_dialogue_done))
+
     def _queue_death(self, unit):
         """Play a one-shot death animation before the unit disappears."""
         duration = unit.death_duration()
@@ -261,6 +380,8 @@ class GameScene(Scene):
                     self.state = "lost"
                     self.game.play("defeat", 0.6)
                     self.finishbattle(record=True)
+                    self._fire_checkpoint_trigger("defeat")
+                    self._queue_outro("defeat")
             else:
                 self.gold += attacker.type.bounty
                 self.gold_earned += attacker.type.bounty
@@ -360,6 +481,7 @@ class GameScene(Scene):
         self.hero = hero
         self.hero_calls += 1
         self.game.play("upgrade", 0.5)
+        self._fire_checkpoint_trigger("hero_summoned")
         return hero
 
     def _update_hero(self, dt):

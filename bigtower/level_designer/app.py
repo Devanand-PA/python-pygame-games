@@ -33,6 +33,10 @@ class Designer:
 
     def __init__(self, fullscreen=False):
         pygame.init()
+        # held keys repeat (arrows, backspace, characters) inside text fields;
+        # 250ms initial delay then ~33 repeats/second - a long 400ms delay
+        # made held arrows feel unresponsive
+        pygame.key.set_repeat(250, 30)
         pygame.display.set_caption("Big Tower - Level Designer")
         self.settings = {"fullscreen": bool(fullscreen)}
         self.window = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
@@ -64,12 +68,14 @@ class Designer:
         self.units_tab = T.UnitsTab(self)
         self.races_tab = T.RacesTab(self)
         self.levels_tab = T.LevelsTab(self)
+        self.script_tab = T.ScriptTab(self)
         self.help_tab = T.HelpTab(self)
         self.tabs = [
             ("Terrain", self.terrain_tab),
             ("Units", self.units_tab),
             ("Races", self.races_tab),
             ("Levels", self.levels_tab),
+            ("Script", self.script_tab),
             ("Help", self.help_tab),
         ]
         self.active = 0
@@ -101,6 +107,7 @@ class Designer:
     def set_tab(self, index):
         if 0 <= index < len(self.tabs):
             self.active = index
+            W.Field.defocus_owner(self.ctx)      # a focused box never leaks
             self._sync_tab_bar()
             shown = self.tabs[index][1]
             if hasattr(shown, "on_show"):
@@ -169,6 +176,13 @@ class Designer:
             event.pos = self._to_canvas_pos(event.pos)
         elif event.type == pygame.MOUSEWHEEL:
             event.pos = self._to_canvas_pos(pygame.mouse.get_pos())
+
+        # a click that does not land inside the focused field's box hands
+        # focus back -- buttons, lists, the map and other tabs all count
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            owner = getattr(self.ctx, "focus_owner", None)
+            if owner is not None and not owner.box_rect.collidepoint(event.pos):
+                W.Field.defocus_owner(self.ctx)
 
         if self.ctx.modal is not None:
             self.ctx.modal.handle_event(event)
