@@ -4,8 +4,8 @@
   "name": "Serpent's Coil",
   "description": "",
   "gold": 280,
+  "gold_per_sec": 2.2,
   "lives": 15,
-  "order": 3,
   "grid": [
     "rrrrrrrrggggtggttttttttrrrrrrtttrrtttttt",
     "S.................................tgtttt",
@@ -177,5 +177,8 @@
       ]
     ]
   ],
-  "gold_per_sec": 2.2
+  "path": [],
+  "map": "",
+  "order": 3,
+  "script": null
 }

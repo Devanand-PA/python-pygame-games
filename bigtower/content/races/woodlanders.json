@@ -1,7 +1,7 @@
 {
   "id": "woodlanders",
   "name": "Woodlanders",
-  "order": 0,
+  "description": "Forest folk. Cheap swarms of chasers backed by long-range snipers.",
   "color": [
     110,
     200,
@@ -12,7 +12,7 @@
     255,
     185
   ],
-  "description": "Forest folk. Cheap swarms of chasers backed by long-range snipers.",
+  "order": 0,
   "units": [
     "gun",
     "scorpion",

@@ -4,8 +4,8 @@
   "name": "Cold Foundry",
   "description": "",
   "gold": 220,
+  "gold_per_sec": 1.0,
   "lives": 20,
-  "order": 1,
   "grid": [
     "rrr...................................Bl",
     "rrr.oollrroooorrrrrrrrrrrrrrrrrroroorrlr",
@@ -30,20 +30,20 @@
   ],
   "terrain_tint": null,
   "available_units": [
-    "gun",
+    "bulwark",
     "cannon",
-    "missile",
     "flak",
-    "snakewatch",
-    "bulwark"
+    "gun",
+    "missile",
+    "snakewatch"
   ],
   "enemy_pool": [
-    "grunt",
     "armored",
-    "tank",
     "bomber",
-    "warlord",
-    "runner"
+    "grunt",
+    "runner",
+    "tank",
+    "warlord"
   ],
   "waves": [
     [
@@ -127,5 +127,8 @@
       ]
     ]
   ],
-  "gold_per_sec": 1.0
+  "path": [],
+  "map": "",
+  "order": 1,
+  "script": null
 }

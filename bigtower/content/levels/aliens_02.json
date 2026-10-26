@@ -4,8 +4,8 @@
   "name": "The Shallows",
   "description": "",
   "gold": 250,
+  "gold_per_sec": 1.6,
   "lives": 20,
-  "order": 2,
   "grid": [
     "llwwsssslsllwwswwwwswwlwwwwsllllssswsssl",
     "wwwslssllllllswwwwwwswwwwwswlllwlswwwwwl",
@@ -30,19 +30,19 @@
   ],
   "terrain_tint": null,
   "available_units": [
-    "gun",
-    "tesla",
-    "spitter",
-    "missile",
+    "bulwark",
     "flak",
-    "bulwark"
+    "gun",
+    "missile",
+    "spitter",
+    "tesla"
   ],
   "enemy_pool": [
-    "swarm",
-    "spitter_foe",
-    "jet",
     "bomber",
     "brute",
+    "swarm",
+    "jet",
+    "spitter_foe",
     "warlord"
   ],
   "waves": [
@@ -141,5 +141,8 @@
       ]
     ]
   ],
-  "gold_per_sec": 1.6
+  "path": [],
+  "map": "",
+  "order": 2,
+  "script": null
 }

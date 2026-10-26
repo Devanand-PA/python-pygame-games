@@ -151,6 +151,8 @@ These sit in a grid under the list panel on every editor tab.
 
 * **Click a row** to select and edit that entry. Selection is *not* an edit, so it
   never creates an undo step.
+* **Labels update as you type** — rename an entry (its `id`, `name`, grid char…)
+  and the list row changes immediately; your selection stays on that row.
 * **Mouse wheel** scrolls the list.
 * **Double-clicking** a row behaves like a click — there is no inline rename.
 
@@ -508,7 +510,8 @@ Below the map is the terrain palette: one swatch per terrain entry, **plus `S`
 and `B`**. **Left- or right-click a swatch** to choose your brush; the status line
 confirms with `Brush: 'w'`, `Brush: 'spawn'` or `Brush: 'base'`. The selected
 swatch is outlined in blue, and each terrain swatch is labelled with its
-character and name.
+character and name (the name is centred under its swatch and shrinks to fit,
+so long names never spill onto the neighbour).
 
 The palette is live: it reflects the Terrain tab's *unsaved* palette too, so you
 can define a new terrain and paint with it before saving.

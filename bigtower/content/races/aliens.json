@@ -1,7 +1,7 @@
 {
   "id": "aliens",
   "name": "The Brood",
-  "order": 1,
+  "description": "Alien hive. Fragile fast drones, zappers and heavy siege.",
   "color": [
     150,
     120,
@@ -12,7 +12,7 @@
     220,
     255
   ],
-  "description": "Alien hive. Fragile fast drones, zappers and heavy siege.",
+  "order": 1,
   "units": [
     "gun",
     "tesla",

@@ -4,8 +4,8 @@
   "name": "The Coilworks",
   "description": "",
   "gold": 280,
+  "gold_per_sec": 2.2,
   "lives": 15,
-  "order": 3,
   "grid": [
     "oollrrrrrrllllllooooorrllorrrrrorrrrrrrr",
     "roororoolooolllllloorrrlooorrrooorrrrrrr",
@@ -30,20 +30,20 @@
   ],
   "terrain_tint": null,
   "available_units": [
-    "gun",
+    "bulwark",
     "cannon",
-    "missile",
     "flak",
-    "snakewatch",
-    "bulwark"
+    "gun",
+    "missile",
+    "snakewatch"
   ],
   "enemy_pool": [
-    "grunt",
     "armored",
-    "tank",
     "bomber",
-    "warlord",
-    "runner"
+    "grunt",
+    "runner",
+    "tank",
+    "warlord"
   ],
   "waves": [
     [
@@ -177,5 +177,69 @@
       ]
     ]
   ],
-  "gold_per_sec": 2.2
+  "path": [
+    [
+      0,
+      18
+    ],
+    [
+      3,
+      18
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      9,
+      3
+    ],
+    [
+      9,
+      17
+    ],
+    [
+      15,
+      17
+    ],
+    [
+      15,
+      4
+    ],
+    [
+      21,
+      4
+    ],
+    [
+      21,
+      16
+    ],
+    [
+      27,
+      16
+    ],
+    [
+      27,
+      3
+    ],
+    [
+      33,
+      3
+    ],
+    [
+      33,
+      17
+    ],
+    [
+      38,
+      17
+    ],
+    [
+      38,
+      12
+    ]
+  ],
+  "map": "",
+  "order": 3,
+  "script": null
 }

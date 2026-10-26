@@ -247,6 +247,21 @@ class FormTab(UndoMixin):
             return self.items[index]
         return None
 
+    def _sync_labels(self):
+        """Rebuild the list labels in place, keeping the selected row.
+
+        Called while the user types, so a renamed entry shows up in the list
+        immediately instead of only after a restart.  ``set_items`` matches
+        the selection by label text (which just changed), so the index is
+        preserved by hand instead.
+        """
+        index = self.list.index
+        self.list.set_items([self.entry_label(i) for i in self.items],
+                            keep=False)
+        if 0 <= index < len(self.list.items):
+            self.list.index = index
+        self.list._clamp()
+
     def _on_select(self, label):
         self.apply_current()
         if 0 <= self.list.index < len(self.items):
@@ -342,6 +357,7 @@ class FormTab(UndoMixin):
         self.app.content.reload()
         art.clear_caches()
         self.mark_saved()
+        self._sync_labels()              # labels can lag behind saved renames
         self.app.set_status("{}: saved {} entries".format(self.title, len(self.items)))
 
     def validate(self):
@@ -378,6 +394,7 @@ class FormTab(UndoMixin):
         # snapshots and save() all read the same, up-to-date, document
         if not self._restoring:
             self.apply_current()
+            self._sync_labels()          # renamed entries show up as you type
         return True
 
     def draw(self):
@@ -1793,6 +1810,15 @@ class LevelsTab(UndoMixin):
             self.current = self.items[self.list.index]
             self._load_entry(self.current)
 
+    def _sync_labels(self):
+        """Rebuild the level-list labels in place, keeping the selected row."""
+        index = self.list.index
+        self.list.set_items([self.entry_label(i) for i in self.items],
+                            keep=False)
+        if 0 <= index < len(self.list.items):
+            self.list.index = index
+        self.list._clamp()
+
     def _load_entry(self, item):
         f = self.fields
         f["id"].set_value(item.get("id"))
@@ -2079,6 +2105,7 @@ class LevelsTab(UndoMixin):
         self.app.content.reload()
         art.clear_caches()
         self.mark_saved()
+        self._sync_labels()
         self.app.set_status("Levels: saved {} entries".format(len(self.items)))
 
     # -- events -------------------------------------------------------------
@@ -2119,6 +2146,7 @@ class LevelsTab(UndoMixin):
         # keep items (grid included) in lock-step with the widgets and canvas
         if not self._restoring:
             self.apply_current()
+            self._sync_labels()          # renamed levels show up as you type
         return True
 
     def _dispatch(self, event):
@@ -2183,7 +2211,16 @@ class LevelsTab(UndoMixin):
             _text(self.ctx, ch, (rect.x + 2, rect.y + 1), (255, 255, 255))
             if ch not in ("S", "B"):
                 name = lookup.get(ch, {}).get("name", ch)
-                _text(self.ctx, str(name)[:9], (rect.x, rect.bottom + 1), W.DIM)
+                # the label band is one swatch wide: centre the name under
+                # its tile and shrink it if it would spill into the neighbour
+                surf = self.ctx.fonts["tiny"].render(str(name), True, W.DIM)
+                max_w = L.PAL_PITCH - 2
+                if surf.get_width() > max_w:
+                    ratio = max_w / surf.get_width()
+                    surf = pygame.transform.smoothscale(
+                        surf, (max_w, max(8, int(surf.get_height() * ratio))))
+                self.ctx.canvas.blit(
+                    surf, surf.get_rect(midtop=(rect.centerx, rect.bottom + 1)))
 
     # -- drawing ------------------------------------------------------------
     def draw(self):
@@ -2233,12 +2270,22 @@ class LevelsTab(UndoMixin):
             colour = W.OK if self.map.path_ok else W.BAD
         # the zoom readout lives on the top line now - the zoom row itself is
         # full of path buttons (kept compact so it clears the right-hand hint)
-        _text(self.ctx, "Map {}x{} - {} px/cell - {}".format(
-            self.map.width, self.map.height, self.map.cell, status),
-            (L.MAP_X, L.TOP), colour)
-        hint = "wheel: zoom   drag: pan   Ctrl+Z: undo"
+        readout = "Map {}x{} - {} px/cell - {}".format(
+            self.map.width, self.map.height, self.map.cell, status)
+        _text(self.ctx, readout, (L.MAP_X, L.TOP), colour)
+        # the right-hand hint yields when the readout grows long: drop the
+        # visible-cells prefix, then the zoom word, then itself
+        small = self.ctx.fonts["small"]
+        avail = (L.MAP_X + L.MAP_W - 16) - (L.MAP_X + small.size(readout)[0]
+                                            + 12)
+        candidates = []
         if not self.map.fits:
-            hint = "{} visible   |   {}".format(self._visible_cells(), hint)
+            candidates.append("{} visible   |   wheel: zoom   drag: pan   "
+                              "Ctrl+Z: undo".format(self._visible_cells()))
+        candidates += ["wheel: zoom   drag: pan   Ctrl+Z: undo",
+                       "drag: pan   Ctrl+Z: undo",
+                       "Ctrl+Z: undo", ""]
+        hint = next((c for c in candidates if small.size(c)[0] <= avail), "")
         _right_text(self.ctx, hint, L.MAP_X + L.MAP_W, L.TOP, W.DIM)
 
     def _visible_cells(self):

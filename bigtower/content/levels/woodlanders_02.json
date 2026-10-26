@@ -4,8 +4,8 @@
   "name": "Twin Brooks",
   "description": "",
   "gold": 250,
+  "gold_per_sec": 1.6,
   "lives": 20,
-  "order": 2,
   "grid": [
     "rrrttttgtttttttttgtttgttttttttttgrrgggtt",
     "S......trtttttttttttttttttttttttgrrtgttt",
@@ -146,5 +146,8 @@
       ]
     ]
   ],
-  "gold_per_sec": 1.6
+  "path": [],
+  "map": "",
+  "order": 2,
+  "script": null
 }

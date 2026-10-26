@@ -4,15 +4,15 @@
   "name": "Dust Landing",
   "description": "",
   "gold": 220,
+  "gold_per_sec": 1.0,
   "lives": 20,
-  "order": 1,
   "grid": [
     "lllllslllllswwwwssssnsswsssswwwslsssllsl",
-    "S....lsllllswwwwwssssswwwsnwswwsllsllnss",
-    "llll.sssslssswswssssssswsssssslsswsllssl",
-    "llss.slllllsllwwnssswwwwwsswsllslwwlslww",
+    "S....tttlllswwwwwssssswwwsnwswwsllsllnss",
+    "llll.tstslssswswssssssswsssssslsswsllssl",
+    "llss.slccllsllwwnssswwwwwsswsllslwwlslww",
     "llll................................llww",
-    "lllslllllllllllwsssswllwwwwwwllllls.wsww",
+    "lllsllcccllllllwsssswllwwwwwwllllls.wsww",
     "wllssslsnsslwllwwwwwwwwwwwwwwllllsl.snss",
     "wslls...............................wlww",
     "ssssl.slslsssswwwssswwswwwwwlllllwwwssww",
@@ -30,19 +30,19 @@
   ],
   "terrain_tint": null,
   "available_units": [
-    "gun",
-    "tesla",
-    "spitter",
-    "missile",
+    "bulwark",
     "flak",
-    "bulwark"
+    "gun",
+    "missile",
+    "spitter",
+    "tesla"
   ],
   "enemy_pool": [
-    "swarm",
-    "spitter_foe",
-    "jet",
     "bomber",
     "brute",
+    "swarm",
+    "jet",
+    "spitter_foe",
     "warlord"
   ],
   "waves": [
@@ -122,5 +122,65 @@
       ]
     ]
   ],
-  "gold_per_sec": 1.0
+  "path": [
+    [
+      0,
+      1
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      4,
+      4
+    ],
+    [
+      35,
+      4
+    ],
+    [
+      35,
+      7
+    ],
+    [
+      5,
+      7
+    ],
+    [
+      5,
+      11
+    ],
+    [
+      37,
+      11
+    ],
+    [
+      37,
+      14
+    ],
+    [
+      5,
+      14
+    ],
+    [
+      5,
+      17
+    ],
+    [
+      37,
+      17
+    ],
+    [
+      37,
+      19
+    ],
+    [
+      30,
+      19
+    ]
+  ],
+  "map": "",
+  "order": 1,
+  "script": null
 }

@@ -55,6 +55,7 @@ class Designer:
             "default": pygame.font.Font(None, 30),
             "big": pygame.font.Font(None, 48),
             "title": pygame.font.Font(None, 60),
+            "tiny": pygame.font.Font(None, 16),   # map-palette labels
         }
         self.ctx = W.Ctx(self.canvas, self.fonts)
         self.content = ContentDB()

@@ -1,7 +1,7 @@
 {
   "id": "machines",
   "name": "Iron Legion",
-  "order": 2,
+  "description": "War machines. Slow, armoured and equipped with heavy artillery.",
   "color": [
     220,
     150,
@@ -12,7 +12,7 @@
     190,
     160
   ],
-  "description": "War machines. Slow, armoured and equipped with heavy artillery.",
+  "order": 2,
   "units": [
     "gun",
     "cannon",

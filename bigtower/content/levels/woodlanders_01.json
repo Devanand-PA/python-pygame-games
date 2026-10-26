@@ -4,26 +4,26 @@
   "name": "Greenfield Road",
   "description": "",
   "gold": 220,
+  "gold_per_sec": 1.0,
   "lives": 20,
-  "order": 1,
   "grid": [
     "rrggggtggtgtttttttttttttttgrrrrrtttttttr",
     "S......ggtgggttttttgtttgtgggrrrrtttttttr",
-    "rrgtrg.gggrtggtttgtgtttttgggrrtttttttgtr",
-    "rrrtrt.ggrrggggtgggggttggggggttttttggttr",
-    "rrrtgr.rrrtrggtttgrgtttrrgggttttttgggttt",
-    "rrrggr.............................ggtgt",
+    "rrgtrg.gggrtggtssssgtttttccccctttttttgtr",
+    "rrssrt.ggrrggggtgggggttggggggttttttggttr",
+    "rrrsgr.rrrtrggtttgrgtttrrgggttttttgggttt",
+    "rrrsgr.............................ggtgt",
     "rrrrrgrrrrrrrrgrgrrrrrgrgrttttggtt.ggggg",
-    "rggggrggggrrtgggggrgggtrtgtgtggggt.ggggt",
-    "ggggrrrggrrttttrtttttrrrrrtgtttttg.ggggt",
+    "rggggrggggrrtgcccccgggtrtgtgtggggt.ggggt",
+    "ggggrrrggrrtttcrtttttrrrrrtgtttttg.ggggt",
     "tg.................................tgttt",
     "gt.ggtttttgttttgggttttttgtttgtgttttttttt",
-    "gt.tgggttgggttggggggtgtgggtgggggtggtggtt",
-    "gt.gtttggttttttttttttttttttrrttttgtgggtt",
+    "gt.tggssssssttggggggtgtgggtgggggtggtggtt",
+    "gt.gttsggttttttttttttttttttrrttttgtgggtt",
     "tg..................................gttt",
     "gggttttrttgtttttttgggtttttttttttttg.tgtg",
-    "ggtgrttgggggtgggggggggttggggggtgggg.gggt",
-    "ttttrrrrrtttttttttttttttttggggttttt.tgtt",
+    "ggsssttgggggtgggggggggttggggggtgggg.gggt",
+    "ttttrrrrrttttttttttttttttcccccttttt.tgtt",
     "rrr.................................tttt",
     "rrr.rrrrrtttttttttttttttttttttttttttttrt",
     "rrr...................................Br"
@@ -31,18 +31,18 @@
   "terrain_tint": null,
   "available_units": [
     "gun",
-    "scorpion",
-    "thornling",
-    "spitter",
     "missile",
-    "snakewatch"
+    "scorpion",
+    "snakewatch",
+    "spitter",
+    "thornling"
   ],
   "enemy_pool": [
-    "grunt",
-    "runner",
     "armored",
-    "jet",
     "brute",
+    "grunt",
+    "jet",
+    "runner",
     "tank"
   ],
   "waves": [
@@ -127,5 +127,57 @@
       ]
     ]
   ],
-  "gold_per_sec": 1.0
+  "path": [
+    [
+      1,
+      1
+    ],
+    [
+      6,
+      1
+    ],
+    [
+      6,
+      5
+    ],
+    [
+      34,
+      5
+    ],
+    [
+      34,
+      9
+    ],
+    [
+      2,
+      9
+    ],
+    [
+      2,
+      13
+    ],
+    [
+      35,
+      13
+    ],
+    [
+      35,
+      17
+    ],
+    [
+      3,
+      17
+    ],
+    [
+      3,
+      19
+    ],
+    [
+      38,
+      19
+    ]
+  ],
+  "map": "",
+  "order": 1,
+  "script": null
 }

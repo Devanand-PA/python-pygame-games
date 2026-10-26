@@ -4,8 +4,8 @@
   "name": "Rust Flats",
   "description": "",
   "gold": 250,
+  "gold_per_sec": 1.6,
   "lives": 20,
-  "order": 2,
   "grid": [
     "rrrllllllooooorrollllllolllllool.....Blr",
     "rrrlllllroooooroooloolooollolooo.oorrlrr",
@@ -30,20 +30,20 @@
   ],
   "terrain_tint": null,
   "available_units": [
-    "gun",
+    "bulwark",
     "cannon",
-    "missile",
     "flak",
-    "snakewatch",
-    "bulwark"
+    "gun",
+    "missile",
+    "snakewatch"
   ],
   "enemy_pool": [
-    "grunt",
     "armored",
-    "tank",
     "bomber",
-    "warlord",
-    "runner"
+    "grunt",
+    "runner",
+    "tank",
+    "warlord"
   ],
   "waves": [
     [
@@ -146,5 +146,8 @@
       ]
     ]
   ],
-  "gold_per_sec": 1.6
+  "path": [],
+  "map": "",
+  "order": 2,
+  "script": null
 }
