@@ -262,6 +262,16 @@ class FormTab(UndoMixin):
             self.list.index = index
         self.list._clamp()
 
+    def _registry_sheets(self):
+        """The live spritesheet registry for the sheet-tile picker.
+
+        Uses the Sheets tab's working list (unsaved edits included): the
+        resulting spec is self-contained, so picking from an unsaved sheet
+        works even before the registry is saved.
+        """
+        sheets_tab = getattr(self.app, "sheets_tab", None)
+        return list(sheets_tab.items) if sheets_tab is not None else []
+
     def _on_select(self, label):
         self.apply_current()
         if 0 <= self.list.index < len(self.items):
@@ -440,6 +450,10 @@ class TerrainTab(FormTab):
         self._loaded_overlay = None
         self._base_frames = None
         self._overlay_frames = None
+        self._base_margin = 0             # sheet geometry that has no form
+        self._base_spacing = 0            # field - carried with the spec
+        self._ov_margin = 0
+        self._ov_spacing = 0
         f["id"] = W.TextField(self.ctx, (0, 0, 0, 0), "id")
         f["name"] = W.TextField(self.ctx, (0, 0, 0, 0), "name")
         f["char"] = W.TextField(self.ctx, (0, 0, 0, 0), "grid char (1 char)")
@@ -488,15 +502,21 @@ class TerrainTab(FormTab):
         return super().rows_used() + 3
 
     @staticmethod
-    def _sprite_spec(kind, tile, path, fw, fh, frames, fps, loop):
+    def _sprite_spec(kind, tile, path, fw, fh, frames, fps, loop,
+                     margin=0, spacing=0):
         if kind == "image":
             return {"kind": "image", "path": path}
         if kind == "sheet":
             value = frames if isinstance(frames, (list, tuple)) else max(1, frames)
-            return {"kind": "sheet", "path": path,
+            spec = {"kind": "sheet", "path": path,
                     "frame_w": max(1, fw), "frame_h": max(1, fh),
                     "frames": value, "fps": max(0.1, fps),
                     "loop": bool(loop)}
+            if margin:
+                spec["margin"] = int(margin)
+            if spacing:
+                spec["spacing"] = int(spacing)
+            return spec
         return {"kind": "pack", "tile": tile}
 
     def load_entry(self, item):
@@ -506,12 +526,18 @@ class TerrainTab(FormTab):
         kind = spec.get("kind", "pack")
         self._base_frames = (list(spec.get("frames")) if isinstance(spec.get("frames"), list)
                              else None)
+        self._base_margin = int(spec.get("margin", 0) or 0)
+        self._base_spacing = int(spec.get("spacing", 0) or 0)
         self.fields["base_kind"].set_value(kind if kind in TERRAIN_BASE_KINDS else "pack")
         self.fields["base_tile"].set_value(spec.get("tile", item.get("base", 157)))
         self.fields["base_path"].set_value(spec.get("path", ""))
         self.fields["base_fw"].set_value(spec.get("frame_w", 32))
         self.fields["base_fh"].set_value(spec.get("frame_h", 32))
-        self.fields["base_frames"].set_value(spec.get("frames", 1))
+        # the frames field shows the COUNT; a frame list itself is carried
+        # in self._base_frames (see collect)
+        raw_frames = spec.get("frames", 1)
+        self.fields["base_frames"].set_value(
+            len(raw_frames) if isinstance(raw_frames, list) else raw_frames)
         self.fields["base_fps"].set_value(spec.get("fps", 8.0))
         self.fields["base_loop"].set_value(spec.get("loop", True))
 
@@ -522,6 +548,8 @@ class TerrainTab(FormTab):
         self._overlay_frames = (list(overlay.get("frames"))
                                 if isinstance(overlay, dict)
                                 and isinstance(overlay.get("frames"), list) else None)
+        self._ov_margin = int(overlay.get("margin", 0) or 0) if isinstance(overlay, dict) else 0
+        self._ov_spacing = int(overlay.get("spacing", 0) or 0) if isinstance(overlay, dict) else 0
         if overlay is None:
             self.fields["overlay_kind"].set_value("none")
             self.fields["overlay_tile"].set_value(-1)
@@ -540,7 +568,9 @@ class TerrainTab(FormTab):
             self.fields["overlay_path"].set_value(overlay.get("path", ""))
             self.fields["ov_fw"].set_value(overlay.get("frame_w", 32))
             self.fields["ov_fh"].set_value(overlay.get("frame_h", 32))
-            self.fields["ov_frames"].set_value(overlay.get("frames", 1))
+            raw_frames = overlay.get("frames", 1)
+            self.fields["ov_frames"].set_value(
+                len(raw_frames) if isinstance(raw_frames, list) else raw_frames)
             self.fields["ov_fps"].set_value(overlay.get("fps", 8.0))
             self.fields["ov_loop"].set_value(overlay.get("loop", True))
 
@@ -563,7 +593,8 @@ class TerrainTab(FormTab):
             "sprite": (self._sprite_spec(base_kind, base_tile, f["base_path"].value,
                                          f["base_fw"].value, f["base_fh"].value,
                                          base_frames, f["base_fps"].value,
-                                         f["base_loop"].value)
+                                         f["base_loop"].value,
+                                         self._base_margin, self._base_spacing)
                        if base_kind != "pack" else None),
             "buildable": f["buildable"].value,
             "walkable": f["walkable"].value,
@@ -582,7 +613,9 @@ class TerrainTab(FormTab):
             data["overlay_sprite"] = (self._sprite_spec(okind, otile, f["overlay_path"].value,
                                                         f["ov_fw"].value, f["ov_fh"].value,
                                                         ov_frames, f["ov_fps"].value,
-                                                        f["ov_loop"].value)
+                                                        f["ov_loop"].value,
+                                                        self._ov_margin,
+                                                        self._ov_spacing)
                                       if okind != "pack" else None)
         return data
 
@@ -625,9 +658,11 @@ class TerrainTab(FormTab):
                 self.fields["base_fh"].value, self._base_frames
                 if isinstance(self._base_frames, list)
                 else self.fields["base_frames"].value,
-                self.fields["base_fps"].value, self.fields["base_loop"].value)
+                self.fields["base_fps"].value, self.fields["base_loop"].value,
+                self._base_margin, self._base_spacing)
             W.open_terrain_sprite_flow(self.ctx, current,
-                                       lambda spec: self._apply_spec("base", spec))
+                                       lambda spec: self._apply_spec("base", spec),
+                                       sheets=self._registry_sheets())
         else:
             current = self._sprite_spec(
                 self.fields["overlay_kind"].value, self.fields["overlay_tile"].value,
@@ -635,9 +670,11 @@ class TerrainTab(FormTab):
                 self.fields["ov_fh"].value, self._overlay_frames
                 if isinstance(self._overlay_frames, list)
                 else self.fields["ov_frames"].value,
-                self.fields["ov_fps"].value, self.fields["ov_loop"].value)
+                self.fields["ov_fps"].value, self.fields["ov_loop"].value,
+                self._ov_margin, self._ov_spacing)
             W.open_terrain_sprite_flow(self.ctx, current,
-                                       lambda spec: self._apply_spec("overlay", spec))
+                                       lambda spec: self._apply_spec("overlay", spec),
+                                       sheets=self._registry_sheets())
 
     def _apply_spec(self, which, spec):
         f = self.fields
@@ -657,6 +694,8 @@ class TerrainTab(FormTab):
             f["base_fps"].set_value(spec.get("fps", 8.0))
             f["base_loop"].set_value(spec.get("loop", True))
             self._base_frames = frame_list
+            self._base_margin = int(spec.get("margin", 0) or 0)
+            self._base_spacing = int(spec.get("spacing", 0) or 0)
             if kind == "image":
                 self._base_frames = None
         else:
@@ -670,6 +709,8 @@ class TerrainTab(FormTab):
             f["ov_fps"].set_value(spec.get("fps", 8.0))
             f["ov_loop"].set_value(spec.get("loop", True))
             self._overlay_frames = frame_list
+            self._ov_margin = int(spec.get("margin", 0) or 0)
+            self._ov_spacing = int(spec.get("spacing", 0) or 0)
         self.app.set_status("{} sprite: {}".format(which, kind))
 
     def draw(self):
@@ -857,11 +898,22 @@ class UnitsTab(FormTab):
         if kind == "shape":
             return {"kind": "shape", "shape": shape, "color": color}
         if kind == "sheet":
-            return {"kind": "sheet", "path": path,
+            spec = {"kind": "sheet", "path": path,
                     "frame_w": max(1, f["frame_w"].value),
                     "frame_h": max(1, f["frame_h"].value),
                     "frames": max(1, f["sprite_frames"].value),
                     "fps": fps, "loop": loop}
+            # a frame list / sheet geometry picked in a modal survives form
+            # round-trips via the loaded spec (like the anim branch below)
+            loaded = self._loaded_spec if isinstance(self._loaded_spec, dict) else {}
+            if loaded.get("kind") == "sheet" and loaded.get("path") == path:
+                frames = loaded.get("frames")
+                if isinstance(frames, list):
+                    spec["frames"] = list(frames)
+                for key in ("margin", "spacing"):
+                    if loaded.get(key):
+                        spec[key] = int(loaded[key])
+            return spec
         if kind == "anim":
             frames = (self._loaded_spec or {}).get("frames") \
                 if isinstance(self._loaded_spec, dict) else None
@@ -921,12 +973,16 @@ class UnitsTab(FormTab):
 
     def _open_sprite_flow(self):
         W.open_unit_sprite_flow(self.ctx, self._spec_from_fields(),
-                                self._apply_sprite_spec)
+                                self._apply_sprite_spec,
+                                sheets=self._registry_sheets())
 
     def _apply_sprite_spec(self, spec):
         kind = spec.get("kind", "pack")
         self.fields["sprite_kind"].set_value(kind if kind in SPRITE_KINDS else "pack")
         self._sprite_full = spec if kind == "sprites" else None
+        # the form now reflects this spec: sheet frame lists, margin and
+        # spacing are carried through it (see _spec_from_fields)
+        self._loaded_spec = spec
         if kind == "sprites":
             self.fields["sprite_path"].set_value(
                 (spec.get("image") or {}).get("path", ""))
@@ -2295,6 +2351,161 @@ class LevelsTab(UndoMixin):
 
 
 # ===========================================================================
+# sheets (spritesheet registry)
+# ===========================================================================
+class SheetsTab(FormTab):
+    """The spritesheet registry: import a sheet once, pick tiles from it.
+
+    Entries are catalogs -- a PNG under assets/ plus its grid geometry --
+    and live in one file, ``content/spritesheets.json``.  The game itself
+    never reads it: sprite specs produced by the tile picker are
+    self-contained ``sheet`` specs, and the engine's path-keyed image cache
+    means every sprite using a sheet shares one copy of the PNG in memory.
+    """
+
+    title = "Sheets"
+    folder = "sheets"
+    save_fn = "save_spritesheet"      # save() below writes the whole file
+
+    def load_items(self):
+        return [dict(s) for s in self.app.content.spritesheets]
+
+    def entry_label(self, item):
+        return "{}  {} ({}x{})".format(
+            item.get("id"), item.get("path", ""),
+            item.get("frame_w", 32), item.get("frame_h", 32))
+
+    def default_entry(self):
+        return {"id": "new_sheet", "name": "New Sheet", "path": "",
+                "frame_w": 32, "frame_h": 32, "margin": 0, "spacing": 0}
+
+    def build_fields(self):
+        f = self.fields
+        f["id"] = W.TextField(self.ctx, (0, 0, 0, 0), "id")
+        f["name"] = W.TextField(self.ctx, (0, 0, 0, 0), "name")
+        f["path"] = W.ImageField(self.ctx, (0, 0, 0, 0), "png path")
+        f["frame_w"] = W.IntField(self.ctx, (0, 0, 0, 0), "frame w", 32)
+        f["frame_h"] = W.IntField(self.ctx, (0, 0, 0, 0), "frame h", 32)
+        f["margin"] = W.IntField(self.ctx, (0, 0, 0, 0), "margin", 0)
+        f["spacing"] = W.IntField(self.ctx, (0, 0, 0, 0), "spacing", 0)
+        order = ["id", "name", "path", "frame_w", "frame_h", "margin",
+                 "spacing"]
+        for idx, name in enumerate(order):
+            self.place(name, idx % self.cols, idx // self.cols)
+        # one "detect" button under the form, beside the preview
+        top = L.TOP + 4 * L.ROW_H + 2
+        self.detect_btn = W.Btn(self.ctx,
+                                (L.FORM_X, top, 140, L.BTN_H),
+                                "detect tile size", self._detect_frame_size)
+        self.preview_rect = pygame.Rect(L.FORM_X + 156, top,
+                                        L.FORM_W - 156, L.BOTTOM - top - 8)
+
+    # -- save ---------------------------------------------------------------
+    def save(self):
+        self.apply_current()
+        ids = [self.item_id(i) for i in self.items]
+        if len(ids) != len(set(ids)):
+            self.app.set_status("ERROR: duplicate ids - not saved", W.BAD)
+            return
+        if any(not str(i.get("path", "")).strip() for i in self.items):
+            self.app.set_status("ERROR: every sheet needs a png path", W.BAD)
+            return
+        self.app.content.save_spritesheets(self.items)
+        self.app.content.reload()
+        art.clear_caches()
+        self.mark_saved()
+        self._sync_labels()
+        self.app.set_status("Sheets: saved {} entries".format(len(self.items)))
+
+    # -- grid geometry --------------------------------------------------------
+    def _grid_of(self, item, surf):
+        """(fw, fh, spacing, margin, cols, rows) for an item + loaded PNG."""
+        fw = max(1, int(item.get("frame_w", 32) or 32))
+        fh = max(1, int(item.get("frame_h", 32) or 32))
+        spacing = max(0, int(item.get("spacing", 0) or 0))
+        margin = max(0, int(item.get("margin", 0) or 0))
+        cols = max(1, (surf.get_width() - 2 * margin + spacing) // (fw + spacing))
+        rows = max(1, (surf.get_height() - 2 * margin + spacing) // (fh + spacing))
+        return fw, fh, spacing, margin, cols, rows
+
+    def _detect_frame_size(self):
+        """Guess a common tile size that divides the sheet exactly."""
+        self.record("detect")
+        path = self.fields["path"].value
+        surf = art.image(path) if path else None
+        if surf is None or path == "":
+            self.app.set_status("Sheets: pick a png path first", W.BAD)
+            return
+        w, h = surf.get_size()
+        for size in (128, 96, 64, 48, 32, 24, 16):
+            if w % size == 0 and h % size == 0:
+                self.fields["frame_w"].set_value(size)
+                self.fields["frame_h"].set_value(size)
+                self.fields["margin"].set_value(0)
+                self.fields["spacing"].set_value(0)
+                self.app.set_status(
+                    "Sheets: detected {}x{} frames ({}x{} grid)".format(
+                        size, size, w // size, h // size), W.OK)
+                return
+        self.app.set_status(
+            "Sheets: no common tile size divides {}x{}".format(w, h), W.DIM)
+
+    # -- events / draw --------------------------------------------------------
+    def _handle_widgets(self, event):
+        if self.detect_btn.handle_event(event):
+            return True
+        return super()._handle_widgets(event)
+
+    def draw(self):
+        super().draw()
+        self.detect_btn.draw(self.ctx.canvas)
+        self._draw_preview()
+
+    def _draw_preview(self):
+        canvas = self.ctx.canvas
+        panel = self.preview_rect
+        pygame.draw.rect(canvas, W.FIELD_BG, panel, border_radius=4)
+        pygame.draw.rect(canvas, W.EDGE, panel, 1, border_radius=4)
+        item = self.current
+        path = str(item.get("path", "")).strip() if item else ""
+        if not path:
+            hint = self.ctx.fonts["small"].render(
+                "no png selected", True, W.DIM)
+            canvas.blit(hint, hint.get_rect(center=panel.center))
+            return
+        try:
+            surf = art.image(path)
+        except Exception:                               # noqa: BLE001
+            surf = None
+        if surf is None:
+            hint = self.ctx.fonts["small"].render(
+                "cannot load {}".format(path), True, W.BAD)
+            canvas.blit(hint, hint.get_rect(center=panel.center))
+            return
+        fw, fh, spacing, margin, cols, rows = self._grid_of(item, surf)
+        scale = min(panel.width / float(surf.get_width()),
+                    (panel.height - 22) / float(surf.get_height()))
+        shown = pygame.transform.smoothscale(
+            surf, (max(1, int(surf.get_width() * scale)),
+                   max(1, int(surf.get_height() * scale))))
+        canvas.blit(shown, shown.get_rect(midtop=(panel.centerx, panel.y + 4)))
+        # grid overlay at the sheet's own geometry, drawn over the scaled copy
+        for row in range(rows):
+            for col in range(cols):
+                x = panel.centerx - shown.get_width() // 2 \
+                    + int((margin + col * (fw + spacing)) * scale)
+                y = panel.y + 4 + int((margin + row * (fh + spacing)) * scale)
+                pygame.draw.rect(canvas, W.EDGE, (x, y, max(2, int(fw * scale)),
+                                                 max(2, int(fh * scale))), 1)
+        info = self.ctx.fonts["small"].render(
+            "{}x{} px   {}x{} frames   {} total   {}x{} each".format(
+                surf.get_width(), surf.get_height(), cols, rows,
+                cols * rows, fw, fh), True, W.DIM)
+        canvas.blit(info, info.get_rect(midbottom=(panel.centerx,
+                                                   panel.bottom - 4)))
+
+
+# ===========================================================================
 # script (story dialogues and cutscenes)
 # ===========================================================================
 SCRIPT_SECTIONS = ("Intro slides", "Outro: victory", "Outro: defeat",
@@ -2940,7 +3151,7 @@ class HelpTab:
         self.lines = [
             "Big Tower - Level Designer",
             "",
-            "Tabs (top bar): Terrain | Units | Races | Levels | Script | Help",
+            "Tabs (top bar): Terrain | Units | Races | Levels | Script | Sheets | Help",
             "",
             "Lists are on the left; click a row to edit it.  New / Dup / Delete /",
             "Save act on the current list.  Undo / Redo sit under them, and",
@@ -2983,11 +3194,18 @@ class HelpTab:
             "  gold/lives below N, hero summoned, victory, defeat).  Every",
             "  slide and line takes a speaker, text and an image from assets/.",
             "",
+            "Sheets:  the spritesheet registry.  Import a sheet (png path +",
+            "  frame size; 'detect tile size' guesses common ones), then pick",
+            "  'Sheet tile' in any sprite dialog to choose a frame from a",
+            "  live grid.  Sprites share one copy of the PNG in memory; the",
+            "  registry itself is a designer catalog the game never reads.",
+            "",
             "Terrain:  a grid character maps to a base tile + optional overlay.",
             "  buildable = players may place defenders there.",
             "  walkable  = ground enemies may path through it.",
             "  The spawn 'S' and base 'B' characters are reserved.",
-            "  Click the base / overlay preview for a static image or animation.",
+            "  Click the base / overlay preview for a static image, an",
+            "  animation, or one tile from a registered spritesheet.",
             "",
             "Units:  one schema for both sides.",
             "  side=defender -> placed by the player (a 'tower'); side=attacker ->",

@@ -255,10 +255,18 @@ def main():
     check("game scene loads", scene.__module__ == "engine.game_scene")
     check("map parsed with waypoints",
           len(scene.level.waypoints) == len(scene.level.path_cells) > 10)
-    check("path starts at spawn",
-          scene.level.path_cells[0] == scene.level.spawn_cell)
-    check("path ends at base",
-          scene.level.path_cells[-1] == scene.level.base_cell)
+    custom = (scene.level.def_.get("path") or [])
+    if custom:
+        # a designer-painted route replaces the BFS one entirely
+        check("path is the designer's custom route",
+              [list(c) for c in scene.level.path_cells]
+              == [[int(c[0]), int(c[1])] for c in custom],
+              str(scene.level.path_cells[:3]))
+    else:
+        check("path starts at spawn",
+              scene.level.path_cells[0] == scene.level.spawn_cell)
+        check("path ends at base",
+              scene.level.path_cells[-1] == scene.level.base_cell)
     check("shop stocks the level's units", len(scene.shop_units) >= 4,
           f"{len(scene.shop_units)} units")
 
@@ -789,6 +797,11 @@ def main():
     scene.defenders = [d for d in scene.defenders if not getattr(d, "is_hero", False)]
     scene.attackers = []
     scene.hero = None
+    # the content under content/ is user-editable, so the level's balance
+    # (waves, gold, custom paths...) must not decide whether the ENGINE's
+    # victory path gets exercised here: flood the lives so the fixed test
+    # defense always survives to the victory recording
+    scene.lives = 10 ** 6
     game.scene = scene
     scene.first_wave_pending = False
     scene.start_wave()
@@ -903,11 +916,11 @@ def main():
         designer._dispatch(pygame.event.Event(
             pygame.MOUSEBUTTONDOWN, {"pos": pos, "button": 1}))
 
-    check("designer opens six tabs", len(designer.tabs) == 6,
+    check("designer opens seven tabs", len(designer.tabs) == 7,
           str([n for n, _ in designer.tabs]))
     for i, btn in enumerate(designer.tab_buttons):
         click(btn.rect)
-    check("designer tab bar switches tabs", designer.active == 5)
+    check("designer tab bar switches tabs", designer.active == 6)
 
     # terrain: selecting a different row edits that entry
     designer.set_tab(0)

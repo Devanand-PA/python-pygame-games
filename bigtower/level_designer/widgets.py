@@ -1411,19 +1411,22 @@ ImagePicker = FileBrowser
 # "static or animation?" chooser
 # ---------------------------------------------------------------------------
 class SpriteKindDialog:
-    """Ask whether the sprite is a single image or an animation."""
+    """Ask whether the sprite is a single image, an animation, or a sheet tile."""
 
     def __init__(self, ctx, on_choice):
         self.ctx = ctx
         self.on_choice = on_choice
         cw, ch = ctx.canvas.get_size()
-        self.rect = pygame.Rect(0, 0, 560, 240)
+        self.rect = pygame.Rect(0, 0, 620, 250)
         self.rect.center = (cw // 2, ch // 2)
-        bw, bh = 220, 84
-        y = self.rect.y + 108
+        bw, bh = 170, 84
+        y = self.rect.y + 112
+        xs = (self.rect.x + 40, self.rect.x + 40 + bw + 15,
+              self.rect.x + 40 + 2 * (bw + 15))
         self.buttons = [
-            (pygame.Rect(self.rect.x + 40, y, bw, bh), "Static image", "static"),
-            (pygame.Rect(self.rect.x + 300, y, bw, bh), "Animation", "anim"),
+            (pygame.Rect(xs[0], y, bw, bh), "Static image", "static"),
+            (pygame.Rect(xs[1], y, bw, bh), "Animation", "anim"),
+            (pygame.Rect(xs[2], y, bw, bh), "Sheet tile", "sheet"),
         ]
         self.cancel = pygame.Rect(self.rect.centerx - 60, y + bh + 16, 120, 28)
 
@@ -1455,17 +1458,189 @@ class SpriteKindDialog:
             "What kind of sprite is this?", True, TEXT)
         canvas.blit(title, title.get_rect(midtop=(self.rect.centerx, self.rect.y + 22)))
         sub = self.ctx.fonts["small"].render(
-            "Static: one PNG.   Animation: a spritesheet you split into states.",
-            True, DIM)
+            "Static: one PNG.   Animation: a spritesheet you split into states."
+            "   Sheet tile: one frame from an imported sheet.", True, DIM)
         canvas.blit(sub, sub.get_rect(midtop=(self.rect.centerx, self.rect.y + 58)))
+        hints = {"Static image": "image", "Animation": "spritesheet",
+                 "Sheet tile": "via the Sheets tab"}
         for rect, label, _value in self.buttons:
             pygame.draw.rect(canvas, PANEL2, rect, border_radius=6)
             pygame.draw.rect(canvas, ACCENT, rect, 2, border_radius=6)
             surf = self.ctx.fonts["default"].render(label, True, TEXT)
             canvas.blit(surf, surf.get_rect(center=(rect.centerx, rect.centery - 8)))
-            hint = self.ctx.fonts["small"].render(
-                "image" if label == "Static image" else "spritesheet", True, DIM)
+            hint = self.ctx.fonts["small"].render(hints[label], True, DIM)
             canvas.blit(hint, hint.get_rect(center=(rect.centerx, rect.centery + 18)))
+        pygame.draw.rect(canvas, PANEL2, self.cancel, border_radius=4)
+        pygame.draw.rect(canvas, EDGE, self.cancel, 1, border_radius=4)
+        c = self.ctx.fonts["small"].render("Cancel", True, TEXT)
+        canvas.blit(c, c.get_rect(center=self.cancel.center))
+
+
+# ---------------------------------------------------------------------------
+# sheet tile picker (one frame from a registered spritesheet)
+# ---------------------------------------------------------------------------
+class SheetTilePicker:
+    """Click one frame of an imported spritesheet.
+
+    ``sheets`` is the registry from the Sheets tab (normalized dicts).  The
+    chosen frame becomes a self-contained single-frame ``sheet`` spec -- it
+    repeats the sheet's path and geometry, so the game needs no registry.
+    The sheet PNG itself is loaded through :func:`engine.art.image`, whose
+    path-keyed cache keeps one copy in memory however many sprites use it.
+    """
+
+    def __init__(self, ctx, sheets, on_result):
+        self.ctx = ctx
+        self.sheets = [s for s in (sheets or []) if isinstance(s, dict)
+                       and s.get("path")]
+        self.on_result = on_result
+        self.index = 0
+        self.hover = None                 # (col, row) under the cursor
+        cw, ch = ctx.canvas.get_size()
+        self.rect = pygame.Rect(0, 0, 900, 580)
+        self.rect.center = (cw // 2, ch // 2)
+        self.preview = pygame.Rect(self.rect.x + 16, self.rect.y + 76,
+                                   self.rect.width - 32,
+                                   self.rect.height - 132)
+        self.prev_btn = pygame.Rect(self.rect.x + 16, self.rect.y + 34, 34, 30)
+        self.next_btn = pygame.Rect(self.rect.x + self.rect.width - 50,
+                                    self.rect.y + 34, 34, 30)
+        self.cancel = pygame.Rect(self.rect.centerx - 55,
+                                  self.rect.bottom - 42, 110, 28)
+
+    # -- geometry -------------------------------------------------------------
+    def _sheet(self):
+        if 0 <= self.index < len(self.sheets):
+            return self.sheets[self.index]
+        return None
+
+    def _grid(self, sheet, surf):
+        """(fw, fh, spacing, margin, cols, rows, scale) for the shown sheet."""
+        fw = max(1, int(sheet.get("frame_w", 32)))
+        fh = max(1, int(sheet.get("frame_h", 32)))
+        spacing = max(0, int(sheet.get("spacing", 0)))
+        margin = max(0, int(sheet.get("margin", 0)))
+        cols = max(1, (surf.get_width() - 2 * margin + spacing) // (fw + spacing))
+        rows = max(1, (surf.get_height() - 2 * margin + spacing) // (fh + spacing))
+        scale = min(self.preview.width / float(surf.get_width()),
+                    self.preview.height / float(surf.get_height()))
+        return fw, fh, spacing, margin, cols, rows, scale
+
+    def _cell_rect(self, col, row):
+        """Screen rect of grid cell (col, row) on the scaled preview."""
+        sheet = self._sheet()
+        if sheet is None:
+            return None
+        surf = art.image(sheet["path"])
+        fw, fh, spacing, margin, _cols, _rows, scale = self._grid(sheet, surf)
+        x = self.preview.x + (margin + col * (fw + spacing)) * scale
+        y = self.preview.y + (margin + row * (fh + spacing)) * scale
+        return pygame.Rect(int(x), int(y), max(2, int(fw * scale)),
+                           max(2, int(fh * scale)))
+
+    def _cell_at(self, pos):
+        """(col, row, index) under a canvas point, or None outside the grid."""
+        sheet = self._sheet()
+        if sheet is None or not self.preview.collidepoint(pos):
+            return None
+        surf = art.image(sheet["path"])
+        fw, fh, spacing, margin, cols, rows, scale = self._grid(sheet, surf)
+        lx = (pos[0] - self.preview.x) / max(scale, 1e-6)
+        ly = (pos[1] - self.preview.y) / max(scale, 1e-6)
+        col = int((lx - margin) // (fw + spacing))
+        row = int((ly - margin) // (fh + spacing))
+        if not (0 <= col < cols and 0 <= row < rows):
+            return None
+        return col, row, row * cols + col
+
+    # -- events ---------------------------------------------------------------
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.ctx.close_modal()
+            return True
+        if event.type == pygame.MOUSEMOTION:
+            cell = self._cell_at(event.pos)
+            self.hover = (cell[0], cell[1]) if cell else None
+            return True
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if not self.rect.collidepoint(event.pos):
+                self.ctx.close_modal()
+                return True
+            if self.prev_btn.collidepoint(event.pos) and self.sheets:
+                self.index = (self.index - 1) % len(self.sheets)
+                self.hover = None
+                return True
+            if self.next_btn.collidepoint(event.pos) and self.sheets:
+                self.index = (self.index + 1) % len(self.sheets)
+                self.hover = None
+                return True
+            if self.cancel.collidepoint(event.pos):
+                self.ctx.close_modal()
+                return True
+            cell = self._cell_at(event.pos)
+            if cell is not None:
+                sheet = self._sheet()
+                self.ctx.close_modal()
+                self.on_result({           # self-contained single-frame spec
+                    "kind": "sheet", "path": sheet["path"],
+                    "frame_w": int(sheet.get("frame_w", 32)),
+                    "frame_h": int(sheet.get("frame_h", 32)),
+                    "margin": int(sheet.get("margin", 0)),
+                    "spacing": int(sheet.get("spacing", 0)),
+                    "frames": [cell[2]], "fps": 8.0, "loop": False,
+                })
+            return True
+        return True
+
+    # -- drawing ----------------------------------------------------------------
+    def draw(self, canvas):
+        veil = pygame.Surface(canvas.get_size(), pygame.SRCALPHA)
+        veil.fill((0, 0, 0, 185))
+        canvas.blit(veil, (0, 0))
+        pygame.draw.rect(canvas, PANEL, self.rect, border_radius=8)
+        pygame.draw.rect(canvas, EDGE, self.rect, 2, border_radius=8)
+        title = self.ctx.fonts["default"].render(
+            "Pick a tile - click a frame to use it", True, TEXT)
+        canvas.blit(title, title.get_rect(midtop=(self.rect.centerx,
+                                                  self.rect.y + 14)))
+        sheet = self._sheet()
+        if sheet is None:
+            msg = self.ctx.fonts["default"].render(
+                "No spritesheets imported yet - add one in the Sheets tab",
+                True, DIM)
+            canvas.blit(msg, msg.get_rect(center=self.preview.center))
+        else:
+            surf = art.image(sheet["path"])
+            fw, fh, spacing, margin, cols, rows, scale = self._grid(sheet, surf)
+            shown = pygame.transform.smoothscale(
+                surf, (max(1, int(surf.get_width() * scale)),
+                       max(1, int(surf.get_height() * scale))))
+            pygame.draw.rect(canvas, FIELD_BG, self.preview, border_radius=4)
+            canvas.blit(shown, shown.get_rect(center=self.preview.center))
+            # grid overlay at the sheet's own geometry
+            for row in range(rows):
+                for col in range(cols):
+                    pygame.draw.rect(canvas, EDGE, self._cell_rect(col, row), 1)
+            if self.hover:
+                cell = self._cell_rect(*self.hover)
+                pygame.draw.rect(canvas, ACCENT, cell, 3)
+                index = self.hover[1] * cols + self.hover[0]
+                tag = self.ctx.fonts["small"].render(
+                    "frame {}".format(index), True, ACCENT)
+                canvas.blit(tag, (self.prev_btn.right + 260,
+                                  self.next_btn.centery - tag.get_height() // 2))
+            # sheet switcher + frame count
+            for btn, glyph in ((self.prev_btn, "<"), (self.next_btn, ">")):
+                pygame.draw.rect(canvas, PANEL2, btn, border_radius=4)
+                pygame.draw.rect(canvas, EDGE, btn, 1, border_radius=4)
+                g = self.ctx.fonts["default"].render(glyph, True, TEXT)
+                canvas.blit(g, g.get_rect(center=btn.center))
+            label = self.ctx.fonts["small"].render(
+                "{} ({}/{})   {}x{} frames of {}x{} px".format(
+                    sheet.get("name", sheet.get("id", "?")),
+                    self.index + 1, len(self.sheets),
+                    cols, rows, fw, fh), True, DIM)
+            canvas.blit(label, (self.prev_btn.right + 12, self.rect.y + 40))
         pygame.draw.rect(canvas, PANEL2, self.cancel, border_radius=4)
         pygame.draw.rect(canvas, EDGE, self.cancel, 1, border_radius=4)
         c = self.ctx.fonts["small"].render("Cancel", True, TEXT)
@@ -1871,8 +2046,8 @@ def _start_dir(path):
     return path.rsplit("/", 1)[0] if isinstance(path, str) and "/" in path else ""
 
 
-def open_unit_sprite_flow(ctx, current_spec, on_result):
-    """Ask static/animation, pick a file, maybe edit animation states."""
+def open_unit_sprite_flow(ctx, current_spec, on_result, sheets=()):
+    """Ask static/animation/sheet-tile, pick a file, maybe edit states."""
     image = _static_image_of(current_spec)
     animations = _animations_of(current_spec)
 
@@ -1906,13 +2081,18 @@ def open_unit_sprite_flow(ctx, current_spec, on_result):
     def choose(kind):
         if kind == "static":
             pick_static()
+        elif kind == "sheet":
+            # one frame from an imported sheet becomes the unit's static
+            # image; any existing state animations are kept
+            ctx.open_modal(SheetTilePicker(ctx, sheets,
+                                           lambda spec: finalise(spec, animations)))
         else:
             pick_sheet()
 
     ctx.open_modal(SpriteKindDialog(ctx, choose))
 
 
-def open_terrain_sprite_flow(ctx, current_spec, on_result):
+def open_terrain_sprite_flow(ctx, current_spec, on_result, sheets=()):
     """Terrain variant: a single looping animation (no named states)."""
 
     def save_static(path):
@@ -1945,6 +2125,9 @@ def open_terrain_sprite_flow(ctx, current_spec, on_result):
         if kind == "static":
             ctx.open_modal(FileBrowser(ctx, save_static, start=_start_dir(
                 current_spec.get("path") if isinstance(current_spec, dict) else "")))
+        elif kind == "sheet":
+            # one frame from an imported sheet, used directly as the art
+            ctx.open_modal(SheetTilePicker(ctx, sheets, on_result))
         else:
             pick_sheet()
 

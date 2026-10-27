@@ -70,6 +70,7 @@ class Designer:
         self.races_tab = T.RacesTab(self)
         self.levels_tab = T.LevelsTab(self)
         self.script_tab = T.ScriptTab(self)
+        self.sheets_tab = T.SheetsTab(self)
         self.help_tab = T.HelpTab(self)
         self.tabs = [
             ("Terrain", self.terrain_tab),
@@ -77,6 +78,7 @@ class Designer:
             ("Races", self.races_tab),
             ("Levels", self.levels_tab),
             ("Script", self.script_tab),
+            ("Sheets", self.sheets_tab),
             ("Help", self.help_tab),
         ]
         self.active = 0

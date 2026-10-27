@@ -375,7 +375,10 @@ class GameScene(Scene):
             if attacker.reached_base:
                 self.lives -= attacker.type.damage_to_base
                 self.game.play("leak", 0.5)
-                if self.lives <= 0:
+                # several attackers can reach the base in the same reap
+                # pass; the once-per-battle bookkeeping (state change, the
+                # defeat stats, dialogues) must only fire on the first
+                if self.lives <= 0 and self.state != "lost":
                     self.lives = 0
                     self.state = "lost"
                     self.game.play("defeat", 0.6)

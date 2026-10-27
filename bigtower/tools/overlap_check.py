@@ -81,6 +81,13 @@ def collect_static(tab):
         w = getattr(tab, attr, None)
         if w is not None and hasattr(w, "rect"):
             out.append((w.rect, "panel:" + attr))
+    # singletons: the Sheets tab's detect button and preview panel
+    btn = getattr(tab, "detect_btn", None)
+    if btn is not None:
+        out.append((btn.rect, "btn:detect tile size"))
+    prev = getattr(tab, "preview_rect", None)
+    if prev is not None:
+        out.append((prev, "panel:sheet preview"))
     if hasattr(tab, "_base_preview_rect"):
         out.append((tab._base_preview_rect(), "preview:base"))
         out.append((tab._overlay_preview_rect(), "preview:overlay"))

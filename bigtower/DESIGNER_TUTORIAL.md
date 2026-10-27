@@ -22,11 +22,12 @@ writes to disk**, so you never have to guess or read the Python source.
 9. [Races tab](#9-races-tab)
 10. [Levels tab](#10-levels-tab)
 11. [The Script tab](#11-the-script-tab)
-12. [Setting sprite art](#12-setting-sprite-art)
-13. [Saving, undo and what lands on disk](#13-saving-undo-and-what-lands-on-disk)
-14. [Worked example: a new level](#14-worked-example-a-new-level)
-15. [Troubleshooting](#15-troubleshooting)
-16. [Where things live in the code](#16-where-things-live-in-the-code)
+12. [The Sheets tab](#12-the-sheets-tab)
+13. [Setting sprite art](#13-setting-sprite-art)
+14. [Saving, undo and what lands on disk](#14-saving-undo-and-what-lands-on-disk)
+15. [Worked example: a new level](#15-worked-example-a-new-level)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Where things live in the code](#17-where-things-live-in-the-code)
 
 ---
 
@@ -44,7 +45,7 @@ python designer.py
 ```
 
 There is **no install step and no arguments required**. The designer opens a
-window titled *"Big Tower - Level Designer"* and shows six tabs across the top:
+window titled *"Big Tower - Level Designer"* and shows seven tabs across the top:
 
 | Tab | What you edit |
 | --- | --- |
@@ -53,6 +54,7 @@ window titled *"Big Tower - Level Designer"* and shows six tabs across the top:
 | **Races** | A campaign: which units it offers, which enemies it spawns, its hero |
 | **Levels** | The map grid, economy, shop, enemy pool, wave list and enemy route |
 | **Script** | Story dialogues and cutscenes (intro/outro slides, checkpoints) |
+| **Sheets** | The spritesheet registry: import a sheet once, pick tiles from it |
 | **Help** | A scrollable in-app cheat sheet |
 
 The status line at the **top-right of the tab bar** tells you what just happened
@@ -243,7 +245,7 @@ Entries live in `content/terrain.json` (one file holds all of them).
 | `id` | `id` | Unique identifier, e.g. `grass`. Do not change it casually — levels reference terrain by **character**, but other entries reference ids. |
 | `name` | `name` | Display name shown under the palette swatch in the Levels tab (truncated to 9 characters there). |
 | `grid char (1 char)` | `char` | The single character painted into the map grid. Only the first character is stored. Must be **unique** across all terrain, and must not be `S`, `B` or a space. |
-| `base kind` | `sprite.kind` or `base` | How the ground art is drawn. One of `pack`, `image`, `sheet`. See [Sprite art](#12-setting-sprite-art). |
+| `base kind` | `sprite.kind` or `base` | How the ground art is drawn. One of `pack`, `image`, `sheet`. See [Sprite art](#13-setting-sprite-art). |
 | `base tile` | `base` | Kenney tile number for `pack` kind. Shown in the base preview. |
 | `base png` | `sprite.path` | PNG path (relative to `assets/`) for `image` / `sheet` kinds. |
 | `base frame w` / `base frame h` | `sprite.frame_w` / `frame_h` | Pixel size of one frame in the sheet. Default `32`. |
@@ -394,7 +396,7 @@ glance.
 The large box at the bottom-left is the **live sprite preview**. It animates, and
 it is showing exactly what the game will draw with the current settings.
 
-Click it to open the sprite flow — see [Setting sprite art](#12-setting-sprite-art).
+Click it to open the sprite flow — see [Setting sprite art](#13-setting-sprite-art).
 The caption beneath reads `Sprite - click to change`, plus either
 `states: idle, walk, attack, death` for a full animation or
 `N frames @ F fps` / `static pack` for simpler art.
@@ -706,7 +708,45 @@ first problem shows on the status line. Fix it and save again.
 
 ---
 
-## 12. Setting sprite art
+## 12. The Sheets tab
+
+**Help text:** the Sheets tab is your spritesheet registry. Import a sheet
+once, and every other tab can pick frames from it — terrain base art, terrain
+overlays, unit sprites — without browsing for files or re-typing grid sizes.
+
+Sheets live in one file, `content/spritesheets.json`. The game itself never
+reads it: what a picked tile produces is a small self-contained `sheet` spec
+(path + geometry + frame index), and the engine's image cache loads the
+underlying PNG **once** however many sprites use it.
+
+### Importing a sheet
+
+| Control | Help text |
+| --- | --- |
+| `New` | Create a registry entry, then click the `png path` field's `png` button to browse `assets/` for the sheet. |
+| `detect tile size` | Guess a common frame size (128/96/64/48/32/24/16 px) that divides the sheet exactly, and reset margin/spacing. One click for standard sheets. |
+| `frame w` / `frame h` | One frame's size in pixels. The preview overlays the grid live so you can adjust until it lines up. |
+| `margin` / `spacing` | The gap at the sheet's edge and between frames, for padded sheets. |
+| Preview panel | Shows the whole sheet with the grid overlay and a readout (`1472x832 px 46x26 frames 1196 total 32x32 each`). If the cyan boxes sit on the right tiles, your geometry is right. |
+| `Save` | Write the registry; `Dup` copies an entry (handy for the same sheet at another frame size), `Delete` removes it. Deleting a registry entry never breaks existing sprites — specs are self-contained. |
+
+The shipped registry already contains the **Kenney Tower Defense** tilesheet
+(32×32 frames), so `Sheet tile` works out of the box.
+
+### Picking a tile
+
+Wherever the sprite dialog appears (see [Setting sprite art](#13-setting-sprite-art)),
+choose **Sheet tile**: the picker shows every registered sheet — flip through
+them with `<` / `>` — with the frame grid drawn over it. Hover to highlight a
+frame (its index is displayed), click to use it.
+
+* On the **Terrain** tab the frame becomes the base or overlay art directly.
+* On the **Units** tab it becomes the unit's static image; any existing state
+  animations are kept.
+
+---
+
+## 13. Setting sprite art
 
 The art flow is identical on the **Units** and **Terrain** tabs.
 
@@ -715,17 +755,25 @@ The art flow is identical on the **Units** and **Terrain** tabs.
 Click the sprite preview box (Units: *"Sprite - click to change"*; Terrain:
 *"click the icon: static image or animation"*).
 
-### Step 2 — choose static or animation
+### Step 2 — choose static, animation or a sheet tile
 
 A dialog asks **"What kind of sprite is this?"** with the subtitle
-*"Static: one PNG. Animation: a spritesheet you split into states."*
+*"Static: one PNG. Animation: a spritesheet you split into states. Sheet tile:
+one frame from an imported sheet."*
 
 | Choice | Help text |
 | --- | --- |
-| **Static image** *(subtitle "image")* | One PNG, drawn as-is. Falls back to being used for states that have no animation. |
-| **Animation** *(subtitle "spritesheet")* | A spritesheet you slice into named states. |
+| **Static image** | One PNG, drawn as-is. Falls back to being used for states that have no animation. |
+| **Animation** | A spritesheet you slice into named states. |
+| **Sheet tile** | One frame from a sheet registered in the **Sheets** tab — no file browser, no slicing: pick the frame from a live grid preview. |
 
 Cancel or click outside to abort.
+
+> **Why "Sheet tile" exists:** the Sheets tab lets you import a spritesheet
+> once (with its grid geometry) and then pick any frame of it, anywhere.
+> Every entry that uses the sheet stores a small self-contained `sheet` spec —
+> path + geometry + frame index — and the engine loads the PNG **once** in
+> memory no matter how many sprites share it.
 
 ### Step 3 — pick the file
 
@@ -782,7 +830,7 @@ You can hand-edit any of these in JSON; the designer reads them back losslessly.
 
 ---
 
-## 13. Saving, undo and what lands on disk
+## 14. Saving, undo and what lands on disk
 
 ### What Save does
 
@@ -806,10 +854,12 @@ content/
   units/              # one JSON per unit
   races/              # one JSON per race
   levels/             # one JSON per level
+  spritesheets.json   # the designer's sheet registry (the game never reads it)
 ```
 
 **The game reads these exact files**, so designer changes are live in the game on
-the next launch.
+the next launch. (`spritesheets.json` is the one exception: sprite *specs* are
+self-contained, so the registry is a designer-side catalog only.)
 
 ### Undo in detail
 
@@ -833,7 +883,7 @@ unsaved.
 
 ---
 
-## 14. Worked example: a new level
+## 15. Worked example: a new level
 
 1. **Save your units first.** On the **Units** tab, create or adjust any defenders
    and attackers you need, then **Save**.
@@ -866,7 +916,7 @@ unsaved.
 
 ---
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
@@ -889,7 +939,7 @@ unsaved.
 
 ---
 
-## 16. Where things live in the code
+## 17. Where things live in the code
 
 Useful if you want to extend the designer:
 
