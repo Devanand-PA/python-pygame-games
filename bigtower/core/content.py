@@ -64,6 +64,11 @@ def _int(value, default=0):
         return int(default)
 
 
+def _text(value):
+    """Coerce anything to a string (None -> '')."""
+    return "" if value is None else str(value)
+
+
 # ---------------------------------------------------------------------------
 # terrain
 # ---------------------------------------------------------------------------
@@ -492,6 +497,38 @@ DIALOGUE_TRIGGERS_NEEDING_VALUE = ("wave_start", "wave_cleared", "kills",
 SCRIPT_LINE_KEYS = ("image", "speaker", "text", "side", "caption")
 SCRIPT_SIDES = ("left", "right")
 
+# --- spritesheet registry -----------------------------------------------------
+# A catalog entry for the designer's Sheets tab: one imported spritesheet and
+# its grid geometry.  Sprite SPECS never reference these entries -- a spec
+# repeats path + geometry itself -- so the registry is pure convenience and
+# the game never needs to read it.
+SPRITESHEET_DEFAULT = {
+    "id": "sheet",             # unique registry id
+    "name": "Sheet",          # display name
+    "path": "",               # PNG path relative to assets/
+    "frame_w": 32,            # one frame's size in pixels
+    "frame_h": 32,
+    "margin": 0,              # gap between the sheet edge and the grid
+    "spacing": 0,             # gap between frames
+}
+
+
+def normalize_spritesheet(raw):
+    """Tolerantly coerce one registry entry; None for junk (never raises)."""
+    if not isinstance(raw, dict):
+        return None
+    path = _text(raw.get("path")).strip()
+    if not path:
+        return None
+    sheet = dict(SPRITESHEET_DEFAULT)
+    sheet["id"] = _text(raw.get("id")).strip() or "sheet"
+    sheet["name"] = _text(raw.get("name")).strip() or sheet["id"]
+    sheet["path"] = path
+    for key, minimum in (("frame_w", 1), ("frame_h", 1),
+                         ("margin", 0), ("spacing", 0)):
+        sheet[key] = max(minimum, _int(raw.get(key), SPRITESHEET_DEFAULT[key]))
+    return sheet
+
 
 def _script_text(value):
     """Coerce anything to a clean string (None -> "")."""
@@ -667,7 +704,28 @@ class ContentDB:
         self._load_units()
         self._load_races()
         self._load_levels()
+        self._load_spritesheets()
         return self
+
+    def _load_spritesheets(self):
+        """The designer's spritesheet registry (the game itself ignores it).
+
+        Entries are catalogs: a path under ``assets/`` plus the grid geometry,
+        so the Sheets tab and the tile picker can browse them.  Actual sprite
+        *specs* stay self-contained (a ``sheet`` spec repeats path + geometry
+        + frame indices), so levels render unchanged without this file.
+        """
+        self.spritesheets = []
+        data = self._load_json(self.root / "spritesheets.json")
+        entries = []
+        if isinstance(data, dict):
+            entries = data.get("sheets") or []
+        elif isinstance(data, list):
+            entries = data
+        for entry in entries:
+            sheet = normalize_spritesheet(entry)
+            if sheet is not None:
+                self.spritesheets.append(sheet)
 
     def _load_terrain(self):
         self.terrains = []

@@ -148,6 +148,22 @@
       "walkable": true,
       "tint": null,
       "description": "Cactus bush"
+    },
+    {
+      "id": "sand_cactus",
+      "name": "Sand cactus",
+      "char": "C",
+      "base": 188,
+      "overlay": null,
+      "sprite": null,
+      "overlay_sprite": {
+        "kind": "image",
+        "path": "terrain/overlays/cactus.png"
+      },
+      "buildable": true,
+      "walkable": true,
+      "tint": null,
+      "description": "Warm buildable ground."
     }
   ]
 }
