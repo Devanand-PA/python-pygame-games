@@ -686,6 +686,7 @@ class ContentDB:
         self.units = {}
         self.races = {}
         self.levels = {}
+        self.spritesheets = []
         self.errors = []
         self.reload()
 
@@ -880,6 +881,14 @@ class ContentDB:
                    for t in (terrains if terrains is not None else self.terrains)]
         self._write(self.root / "terrain.json", {"version": 1, "terrain": entries})
 
+    def save_spritesheets(self, sheets=None):
+        """Write the whole spritesheet registry (single file)."""
+        entries = [normalize_spritesheet(s) for s in
+                   (sheets if sheets is not None else self.spritesheets)]
+        entries = [e for e in entries if e is not None]
+        self._write(self.root / "spritesheets.json",
+                    {"version": 1, "sheets": entries})
+
     def save_unit(self, unit):
         data = unit.to_dict() if isinstance(unit, UnitType) else dict(unit)
         self._write(self.root / "units" / f"{data['id']}.json", data)
@@ -918,10 +927,10 @@ class ContentDB:
         """Remove ``folder/*.json`` files whose stem is not in ``keep_ids``.
 
         Used by the designer's Save/Delete buttons so removing an entry there
-        also removes its file.  ``terrain`` lives in a single file, so it has
-        nothing to clean up.
+        also removes its file.  ``terrain`` and the ``sheets`` registry live
+        in single files, so they have nothing to clean up.
         """
-        if folder == "terrain":
+        if folder in ("terrain", "sheets"):
             return
         directory = self.root / folder
         if not directory.is_dir():
