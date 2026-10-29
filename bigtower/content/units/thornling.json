@@ -1,23 +1,73 @@
 {
   "id": "thornling",
   "name": "Thornling",
+  "side": "defender",
   "role": "melee",
   "sprite": {
     "kind": "pack",
     "tile": 227
   },
+  "projectile_sprite": null,
   "sprite_scale": 0.9,
+  "tint": null,
   "hp": 140,
   "cost": 45,
-  "speed": 120,
-  "range": 40,
-  "damage": 6,
-  "cooldown": 0.35,
+  "bounty": 0,
+  "speed": 120.0,
   "movement": "chase",
   "attack": "melee",
-  "targets": "ground",
+  "range": 40.0,
+  "damage": 6.0,
+  "cooldown": 0.35,
+  "projectiles": 1,
+  "projectile": "dot",
+  "splash": 0.0,
   "sound": "sting",
-  "aggro": 190,
+  "targets": "ground",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 1,
+  "stop_to_attack": true,
+  "aggro": 190.0,
+  "radius": 16.0,
+  "can_be_attacked": true,
   "description": "Fast, cheap melee chaser.",
-  "side": "defender"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "range": 1.12
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "rate": 0.82
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "hp": 1.25
+      }
+    }
+  ]
 }

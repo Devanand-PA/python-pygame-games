@@ -664,7 +664,8 @@ class TileField(Field):
         prev = pygame.Rect(box.right - 61, box.y, 26, box.height)
         if n is not None and n >= 0:
             try:
-                img = art.scaled(art.tile(int(n)), (prev.height - 4, prev.height - 4))
+                img = art.scaled(art.tile(int(n)),
+                                 (prev.height - 4, prev.height - 4), ("tile", int(n)))
                 canvas.blit(img, img.get_rect(center=prev.center))
             except Exception:      # noqa: BLE001
                 pass
@@ -729,7 +730,9 @@ class ImageField(Field):
         pygame.draw.rect(canvas, FIELD_EDGE, thumb, 1, border_radius=3)
         if self.value:
             try:
-                img = art.scaled(art.image(self.value), (thumb.height - 4, thumb.height - 4))
+                img = art.scaled(art.image(self.value),
+                                 (thumb.height - 4, thumb.height - 4),
+                                 ("image", self.value))
                 canvas.blit(img, img.get_rect(center=thumb.center))
             except Exception:      # noqa: BLE001
                 pass
@@ -1255,7 +1258,8 @@ class TilePicker:
             y = grid.y + (row - self.scroll) * self.CELL
             cell = pygame.Rect(x, y, self.CELL, self.CELL)
             try:
-                img = art.scaled(art.tile(i), (self.CELL - 8, self.CELL - 8))
+                img = art.scaled(art.tile(i), (self.CELL - 8, self.CELL - 8),
+                                 ("tile", i))
                 canvas.blit(img, img.get_rect(center=cell.center))
             except Exception:      # noqa: BLE001
                 pass
@@ -1381,7 +1385,8 @@ class FileBrowser:
             else:
                 try:
                     img = art.scaled(art.image(self._rel_of(name)),
-                                     (icon.height, icon.height))
+                                     (icon.height, icon.height),
+                                     ("image", self._rel_of(name)))
                     canvas.blit(img, img.get_rect(center=icon.center))
                 except Exception:      # noqa: BLE001
                     pass
@@ -1526,6 +1531,22 @@ class SheetTilePicker:
                     self.preview.height / float(surf.get_height()))
         return fw, fh, spacing, margin, cols, rows, scale
 
+    def _shown_origin(self, surf, scale):
+        """Top-left corner of the scaled sheet as ``draw`` blits it.
+
+        ``draw`` *centres* the scaled sheet in the preview panel, so the art
+        only starts at ``preview.topleft`` when its aspect ratio happens to
+        fill the panel.  The grid overlay and the hit-test have to measure
+        from this origin too: with Kenney (1472x832, height-limited 868x448
+        panel) the sheet sits 38px to the right of ``preview.x`` -- about one
+        whole 64px tile on screen -- which made every click select the tile to
+        the right of the one under the cursor.
+        """
+        shown_w = max(1, int(surf.get_width() * scale))
+        shown_h = max(1, int(surf.get_height() * scale))
+        return (self.preview.centerx - shown_w // 2,
+                self.preview.centery - shown_h // 2)
+
     def _cell_rect(self, col, row):
         """Screen rect of grid cell (col, row) on the scaled preview."""
         sheet = self._sheet()
@@ -1533,8 +1554,9 @@ class SheetTilePicker:
             return None
         surf = art.image(sheet["path"])
         fw, fh, spacing, margin, _cols, _rows, scale = self._grid(sheet, surf)
-        x = self.preview.x + (margin + col * (fw + spacing)) * scale
-        y = self.preview.y + (margin + row * (fh + spacing)) * scale
+        ox, oy = self._shown_origin(surf, scale)
+        x = ox + (margin + col * (fw + spacing)) * scale
+        y = oy + (margin + row * (fh + spacing)) * scale
         return pygame.Rect(int(x), int(y), max(2, int(fw * scale)),
                            max(2, int(fh * scale)))
 
@@ -1545,8 +1567,9 @@ class SheetTilePicker:
             return None
         surf = art.image(sheet["path"])
         fw, fh, spacing, margin, cols, rows, scale = self._grid(sheet, surf)
-        lx = (pos[0] - self.preview.x) / max(scale, 1e-6)
-        ly = (pos[1] - self.preview.y) / max(scale, 1e-6)
+        ox, oy = self._shown_origin(surf, scale)
+        lx = (pos[0] - ox) / max(scale, 1e-6)
+        ly = (pos[1] - oy) / max(scale, 1e-6)
         col = int((lx - margin) // (fw + spacing))
         row = int((ly - margin) // (fh + spacing))
         if not (0 <= col < cols and 0 <= row < rows):

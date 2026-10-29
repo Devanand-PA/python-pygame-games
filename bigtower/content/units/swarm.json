@@ -1,18 +1,92 @@
 {
   "id": "swarm",
   "name": "Drone",
+  "side": "attacker",
+  "role": "",
   "sprite": {
     "kind": "pack",
     "tile": 276
   },
+  "projectile_sprite": null,
   "sprite_scale": 1.0,
+  "tint": null,
   "hp": 18,
-  "speed": 150,
+  "cost": 50,
   "bounty": 4,
-  "damage_to_base": 1,
-  "radius": 11,
+  "speed": 150.0,
   "movement": "route",
   "attack": "none",
+  "range": 120.0,
+  "damage": 5.0,
+  "cooldown": 0.5,
+  "projectiles": 1,
+  "projectile": "dot",
+  "splash": 0.0,
+  "sound": "gun",
+  "targets": "both",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 1,
+  "stop_to_attack": true,
+  "aggro": 160.0,
+  "radius": 11.0,
+  "can_be_attacked": true,
   "description": "Tiny, very fast swarm unit.",
-  "side": "attacker"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.12,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 0.82,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.25,
+        "projectiles": 0
+      }
+    }
+  ]
 }

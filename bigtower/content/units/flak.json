@@ -1,22 +1,92 @@
 {
   "id": "flak",
   "name": "Flak Battery",
+  "side": "defender",
   "role": "anti-air",
   "sprite": {
     "kind": "pack",
     "tile": 231
   },
+  "projectile_sprite": null,
   "sprite_scale": 0.95,
+  "tint": null,
   "hp": 180,
   "cost": 100,
-  "range": 165,
-  "damage": 13,
-  "cooldown": 0.45,
+  "bounty": 0,
+  "speed": 0.0,
   "movement": "static",
   "attack": "projectile",
+  "range": 165.0,
+  "damage": 13.0,
+  "cooldown": 0.45,
+  "projectiles": 1,
   "projectile": "dot",
-  "targets": "air",
+  "splash": 0.0,
   "sound": "gun",
+  "targets": "air",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 1,
+  "stop_to_attack": true,
+  "aggro": 160.0,
+  "radius": 16.0,
+  "can_be_attacked": true,
   "description": "Rapid anti-air only.",
-  "side": "defender"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.12,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 0.82,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.25,
+        "projectiles": 0
+      }
+    }
+  ]
 }

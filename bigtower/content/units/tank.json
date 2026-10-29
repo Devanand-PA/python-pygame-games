@@ -1,25 +1,73 @@
 {
   "id": "tank",
   "name": "Siege Tank",
+  "side": "attacker",
+  "role": "",
   "sprite": {
     "kind": "pack",
     "tile": 250
   },
+  "projectile_sprite": null,
   "sprite_scale": 1.4,
+  "tint": null,
   "hp": 400,
-  "speed": 28,
+  "cost": 50,
   "bounty": 45,
-  "damage_to_base": 3,
-  "radius": 21,
+  "speed": 28.0,
   "movement": "route",
   "attack": "projectile",
-  "projectile": "rocket",
-  "range": 125,
-  "damage": 20,
+  "range": 125.0,
+  "damage": 20.0,
   "cooldown": 2.0,
-  "splash": 40,
-  "targets": "ground",
+  "projectiles": 1,
+  "projectile": "rocket",
+  "splash": 40.0,
   "sound": "missile",
+  "targets": "ground",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 3,
+  "stop_to_attack": true,
+  "aggro": 160.0,
+  "radius": 21.0,
+  "can_be_attacked": true,
   "description": "Slow siege unit that shells defenders.",
-  "side": "attacker"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "range": 1.12
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "rate": 0.82
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "hp": 1.25
+      }
+    }
+  ]
 }

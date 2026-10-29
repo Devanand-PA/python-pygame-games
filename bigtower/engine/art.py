@@ -25,6 +25,23 @@ _rot_cache = {}
 _alpha_cache = {}
 
 
+def _surface_key(surf: pygame.Surface, name=None) -> tuple:
+    """A stable identity for a surface's pixels (a replacement for ``id``).
+
+    ``id()`` is unsafe as a cache key for the temporary frame surfaces that
+    :func:`_sheet_frames` creates: they die immediately, the next allocation
+    reuses the address, and the stale entry is then served for a different
+    frame -- the sprite would silently keep showing the wrong tile.  When the
+    caller knows what the surface *is* (a sheet crop, a pack tile, a loaded
+    image) it passes that name in, which is both stable and free.  Anything
+    unnamed falls back to a hash of its pixels.
+    """
+    if name is not None:
+        return ("named", str(name))
+    return ("raw", surf.get_size(), surf.get_bitsize(),
+            hash(pygame.image.tobytes(surf, "RGBA")))
+
+
 def tile(num: int) -> pygame.Surface:
     """Load a Kenney tile by its number (towerDefense_tile0NN.png)."""
     key = ("tile", num)
@@ -83,16 +100,20 @@ def shape_surface(shape: str, color) -> pygame.Surface:
     return _cache[key]
 
 
-def scaled(surf: pygame.Surface, size) -> pygame.Surface:
-    key = ("scaled", id(surf), size)
+def scaled(surf: pygame.Surface, size, name=None) -> pygame.Surface:
+    # Key by content, not id(): _sheet_frames hands us a freshly allocated
+    # temporary Surface each call, and once it is garbage collected Python
+    # reuses the address -- so id(surf) collisions made later frames return
+    # an earlier frame's cached (wrong) pixels.
+    key = ("scaled", _surface_key(surf, name), size)
     if key not in _cache:
         _cache[key] = pygame.transform.smoothscale(surf, size)
     return _cache[key]
 
 
-def tinted(surf: pygame.Surface, color) -> pygame.Surface:
+def tinted(surf: pygame.Surface, color, name=None) -> pygame.Surface:
     """Multiply a surface's colours by ``color`` (keeps alpha)."""
-    key = ("tint", id(surf), tuple(color[:3]))
+    key = ("tint", _surface_key(surf, name), tuple(color[:3]))
     if key not in _cache:
         out = surf.copy()
         out.fill(tuple(color[:3]) + (255,), special_flags=pygame.BLEND_RGBA_MULT)
@@ -152,14 +173,27 @@ def sprite_frames(spec, size: int, tint=None, name=None):
         image = spec.get("image")
         if image:
             return sprite_frames(image, size, tint)
-        return [_finish(shape_surface("circle", [200, 200, 200]), size, tint)]
+        return [_finish(shape_surface("circle", [200, 200, 200]), size,
+                      tint, ("circle", 200, 200, 200))]
     if kind == "anim":
         frames = [sprite_frames(f, size, tint)[0]
                   for f in (spec.get("frames") or [])]
-        return frames or [_finish(shape_surface("circle", [200, 200, 200]), size, tint)]
+        return frames or [_finish(shape_surface("circle", [200, 200, 200]),
+                                   size, tint, ("circle", 200, 200, 200))]
     if _is_sheet_like(spec):
         return _sheet_frames(spec, size, tint)
-    return [_finish(_base_surface(spec), size, tint)]
+    return [_finish(_base_surface(spec), size, tint, _base_name(spec))]
+
+
+def _base_name(spec):
+    """Stable name for a static spec's base surface (pack tile / image / shape)."""
+    kind = spec.get("kind", "pack") if isinstance(spec, dict) else "pack"
+    if kind == "image":
+        return ("image", spec.get("path", ""))
+    if kind == "shape":
+        return ("shape", spec.get("shape", "circle"),
+                tuple(spec.get("color") or [200, 200, 200]))
+    return ("tile", int(spec.get("tile", 226) or 226))
 
 
 def _base_surface(spec) -> pygame.Surface:
@@ -172,9 +206,9 @@ def _base_surface(spec) -> pygame.Surface:
     return tile(int(spec.get("tile", 226)))
 
 
-def _finish(surf: pygame.Surface, size, tint) -> pygame.Surface:
-    out = scaled(surf, (size, size))
-    return tinted(out, tint) if tint else out
+def _finish(surf: pygame.Surface, size, tint, name=None) -> pygame.Surface:
+    out = scaled(surf, (size, size), name)
+    return tinted(out, tint, name) if tint else out
 
 
 def _frame_indices(spec, cols, rows):
@@ -214,8 +248,13 @@ def _sheet_frames(spec, size, tint):
                            margin + r * (fh + spacing), fw, fh)
         frame = pygame.Surface((fw, fh), pygame.SRCALPHA)
         frame.blit(sheet, (0, 0), rect)
-        frames.append(_finish(frame, size, tint))
-    return frames or [_finish(sheet, size, tint)]
+        # the crop is named, so the scaled/tinted caches key on (sheet, frame
+        # geometry, index) instead of the id() of this throw-away Surface
+        key = (spec.get("path"), fw, fh, margin, spacing, cols, i)
+        frames.append(_finish(frame, size, tint, key))
+    if not frames:
+        return [_finish(sheet, size, tint, ("whole", spec.get("path"), size))]
+    return frames
 
 
 def frame_count(spec, name=None) -> int:

@@ -1,25 +1,92 @@
 {
   "id": "bomber",
   "name": "Bomber",
+  "side": "attacker",
+  "role": "",
   "sprite": {
     "kind": "pack",
     "tile": 271
   },
+  "projectile_sprite": null,
   "sprite_scale": 1.2,
+  "tint": null,
   "hp": 90,
-  "speed": 90,
+  "cost": 50,
   "bounty": 18,
-  "damage_to_base": 2,
-  "radius": 16,
-  "is_flying": true,
+  "speed": 90.0,
   "movement": "direct",
   "attack": "projectile",
-  "projectile": "rocket",
-  "range": 120,
-  "damage": 12,
+  "range": 120.0,
+  "damage": 12.0,
   "cooldown": 1.6,
-  "targets": "ground",
+  "projectiles": 1,
+  "projectile": "rocket",
+  "splash": 0.0,
   "sound": "missile",
+  "targets": "ground",
+  "targeting": "",
+  "is_flying": true,
+  "damage_to_base": 2,
+  "stop_to_attack": true,
+  "aggro": 160.0,
+  "radius": 16.0,
+  "can_be_attacked": true,
   "description": "Flies over the map bombing defenders.",
-  "side": "attacker"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.12,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 0.82,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.25,
+        "projectiles": 0
+      }
+    }
+  ]
 }

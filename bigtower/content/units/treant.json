@@ -1,26 +1,73 @@
 {
   "id": "treant",
   "name": "Elder Treant",
+  "side": "defender",
   "role": "hero",
   "sprite": {
     "kind": "pack",
     "tile": 278
   },
+  "projectile_sprite": null,
   "sprite_scale": 2.1,
+  "tint": null,
   "hp": 1800,
   "cost": 0,
-  "speed": 42,
+  "bounty": 0,
+  "speed": 42.0,
   "movement": "chase",
   "attack": "melee",
-  "aggro": 260,
-  "range": 70,
-  "damage": 55,
+  "range": 70.0,
+  "damage": 55.0,
   "cooldown": 0.9,
-  "splash": 70,
-  "radius": 26,
+  "projectiles": 1,
+  "projectile": "dot",
+  "splash": 70.0,
+  "sound": "boom",
   "targets": "both",
   "targeting": "strongest",
-  "sound": "boom",
+  "is_flying": false,
+  "damage_to_base": 1,
+  "stop_to_attack": true,
+  "aggro": 260.0,
+  "radius": 26.0,
+  "can_be_attacked": true,
   "description": "The Woodlanders' guardian. Marches out when the base is breached.",
-  "side": "defender"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "range": 1.12
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "rate": 0.82
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "hp": 1.25
+      }
+    }
+  ]
 }

@@ -1,21 +1,73 @@
 {
   "id": "tesla",
   "name": "Tesla Coil",
+  "side": "defender",
   "role": "ranged",
   "sprite": {
     "kind": "pack",
     "tile": 229
   },
+  "projectile_sprite": null,
   "sprite_scale": 0.95,
+  "tint": null,
   "hp": 170,
   "cost": 130,
-  "range": 120,
-  "damage": 7,
-  "cooldown": 0.12,
+  "bounty": 0,
+  "speed": 0.0,
   "movement": "static",
   "attack": "projectile",
+  "range": 120.0,
+  "damage": 7.0,
+  "cooldown": 0.12,
+  "projectiles": 1,
   "projectile": "dot",
+  "splash": 0.0,
   "sound": "gun",
+  "targets": "both",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 1,
+  "stop_to_attack": true,
+  "aggro": 160.0,
+  "radius": 16.0,
+  "can_be_attacked": true,
   "description": "Very fast zapper, low damage per bolt.",
-  "side": "defender"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "range": 1.12
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "rate": 0.82
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "hp": 1.25
+      }
+    }
+  ]
 }

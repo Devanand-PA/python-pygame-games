@@ -1,10 +1,24 @@
 {
   "id": "brute",
   "name": "Brute",
+  "side": "attacker",
+  "role": "",
   "sprite": {
-    "kind": "pack",
-    "tile": 249
+    "kind": "sheet",
+    "path": "packs/kenney_tower-defense-top-down/Tilesheet/towerDefense_tilesheet.png",
+    "frame_w": 64,
+    "frame_h": 64,
+    "frames": [
+      246
+    ],
+    "cols": 0,
+    "rows": 0,
+    "fps": 8.0,
+    "loop": true,
+    "margin": 0,
+    "spacing": 0
   },
+  "projectile_sprite": null,
   "sprite_scale": 1.5,
   "tint": [
     255,
@@ -12,19 +26,82 @@
     130
   ],
   "hp": 220,
-  "speed": 42,
+  "cost": 50,
   "bounty": 22,
-  "damage_to_base": 2,
-  "radius": 20,
+  "speed": 42.0,
   "movement": "hunt",
   "attack": "melee",
-  "range": 46,
-  "damage": 14,
+  "range": 46.0,
+  "damage": 14.0,
   "cooldown": 0.9,
-  "stop_to_attack": true,
-  "aggro": 210,
-  "targets": "ground",
+  "projectiles": 1,
+  "projectile": "dot",
+  "splash": 0.0,
   "sound": "sting",
+  "targets": "ground",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 2,
+  "stop_to_attack": true,
+  "aggro": 210.0,
+  "radius": 20.0,
+  "can_be_attacked": true,
   "description": "Hunts down the nearest defender and smashes it.",
-  "side": "attacker"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.12,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 0.82,
+        "hp": 1.0,
+        "projectiles": 0
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.25,
+        "projectiles": 0
+      }
+    }
+  ]
 }

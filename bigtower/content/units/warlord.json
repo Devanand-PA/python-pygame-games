@@ -1,25 +1,73 @@
 {
   "id": "warlord",
   "name": "Warlord",
+  "side": "attacker",
+  "role": "",
   "sprite": {
     "kind": "pack",
     "tile": 278
   },
+  "projectile_sprite": null,
   "sprite_scale": 2.0,
+  "tint": null,
   "hp": 900,
-  "speed": 26,
+  "cost": 50,
   "bounty": 120,
-  "damage_to_base": 5,
-  "radius": 24,
+  "speed": 26.0,
   "movement": "route",
   "attack": "projectile",
-  "projectile": "rocket",
-  "range": 150,
-  "damage": 25,
+  "range": 150.0,
+  "damage": 25.0,
   "cooldown": 2.2,
-  "splash": 48,
-  "targets": "both",
+  "projectiles": 1,
+  "projectile": "rocket",
+  "splash": 48.0,
   "sound": "missile",
+  "targets": "both",
+  "targeting": "",
+  "is_flying": false,
+  "damage_to_base": 5,
+  "stop_to_attack": true,
+  "aggro": 160.0,
+  "radius": 24.0,
+  "can_be_attacked": true,
   "description": "Boss. Soaks damage and shells everything.",
-  "side": "attacker"
+  "upgrade_paths": [
+    {
+      "id": "damage",
+      "name": "Damage",
+      "gains": {
+        "damage": 1.6
+      }
+    },
+    {
+      "id": "range",
+      "name": "Range",
+      "gains": {
+        "range": 1.12
+      }
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid Fire",
+      "gains": {
+        "rate": 0.82
+      }
+    },
+    {
+      "id": "multi",
+      "name": "Multi Shot",
+      "gains": {
+        "damage": 0.92,
+        "projectiles": 1
+      }
+    },
+    {
+      "id": "vitality",
+      "name": "Vitality",
+      "gains": {
+        "hp": 1.25
+      }
+    }
+  ]
 }

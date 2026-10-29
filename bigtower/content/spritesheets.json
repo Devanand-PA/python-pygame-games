@@ -5,8 +5,8 @@
       "id": "kenney_td",
       "name": "Kenney Tower Defense",
       "path": "packs/kenney_tower-defense-top-down/Tilesheet/towerDefense_tilesheet.png",
-      "frame_w": 32,
-      "frame_h": 32,
+      "frame_w": 64,
+      "frame_h": 64,
       "margin": 0,
       "spacing": 0
     }

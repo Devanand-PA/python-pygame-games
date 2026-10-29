@@ -27,10 +27,10 @@ class Projectile:
             self.sprite = art.sprite(spec, 14, unit.tint)
         elif unit.type.projectile == "rocket":
             self.speed = 300.0
-            self.sprite = art.scaled(art.tile(252), (18, 18))
+            self.sprite = art.scaled(art.tile(252), (18, 18), ("tile", 252))
         else:
             self.speed = 460.0
-            self.sprite = art.scaled(art.tile(272), (10, 10))
+            self.sprite = art.scaled(art.tile(272), (10, 10), ("tile", 272))
 
     def update(self, dt, targets, effects):
         """Home toward the target; on arrival damage it (or splash ``targets``)."""

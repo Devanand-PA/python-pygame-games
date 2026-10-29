@@ -983,6 +983,19 @@ class UnitsTab(FormTab):
         # the form now reflects this spec: sheet frame lists, margin and
         # spacing are carried through it (see _spec_from_fields)
         self._loaded_spec = spec
+        if kind in ("sheet", "anim"):
+            # the picked tile is indexed on the *sheet's own* grid, so its
+            # frame size has to land in the form too.  Without this the
+            # preview (and Save) rebuild the spec from the untouched 32x32
+            # default, re-slicing a 64-grid index on a 32-grid -- which makes
+            # two different tiles land on the same pixels.
+            self.fields["frame_w"].set_value(max(1, int(spec.get("frame_w", 32) or 32)))
+            self.fields["frame_h"].set_value(max(1, int(spec.get("frame_h", 32) or 32)))
+            frames = spec.get("frames")
+            if isinstance(frames, list):
+                self.fields["sprite_frames"].set_value(max(1, len(frames)))
+            self.fields["sprite_fps"].set_value(spec.get("fps", 8.0))
+            self.fields["sprite_loop"].set_value(spec.get("loop", True))
         if kind == "sprites":
             self.fields["sprite_path"].set_value(
                 (spec.get("image") or {}).get("path", ""))
@@ -1557,8 +1570,9 @@ class MapCanvas:
 
     def _marker(self, ch):
         if ch not in self._marker_cache:
+            tile_num = 133 if ch == "S" else 180
             self._marker_cache[ch] = art.scaled(
-                art.tile(133 if ch == "S" else 180), (self.cell, self.cell))
+                art.tile(tile_num), (self.cell, self.cell), ("tile", tile_num))
         return self._marker_cache[ch]
 
     def draw(self):
@@ -2252,7 +2266,8 @@ class LevelsTab(UndoMixin):
         lookup = self.app.terrain_lookup()
         for rect, ch in self.palette_rects():
             if ch in ("S", "B"):
-                img = art.scaled(art.tile(133 if ch == "S" else 180), (44, 44))
+                tile_num = 133 if ch == "S" else 180
+                img = art.scaled(art.tile(tile_num), (44, 44), ("tile", tile_num))
             else:
                 terr = lookup.get(ch)
                 if terr is None:
