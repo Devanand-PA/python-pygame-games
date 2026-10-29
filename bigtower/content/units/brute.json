@@ -11,12 +11,8 @@
     "frames": [
       246
     ],
-    "cols": 0,
-    "rows": 0,
     "fps": 8.0,
-    "loop": true,
-    "margin": 0,
-    "spacing": 0
+    "loop": true
   },
   "projectile_sprite": null,
   "sprite_scale": 1.5,

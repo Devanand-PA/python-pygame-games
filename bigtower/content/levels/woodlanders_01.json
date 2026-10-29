@@ -179,5 +179,12 @@
   ],
   "map": "",
   "order": 1,
-  "script": null
+  "script": {
+    "intro": [],
+    "outro": {
+      "victory": [],
+      "defeat": []
+    },
+    "checkpoints": []
+  }
 }

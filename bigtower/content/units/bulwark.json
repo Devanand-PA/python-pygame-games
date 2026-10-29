@@ -4,8 +4,15 @@
   "side": "defender",
   "role": "melee",
   "sprite": {
-    "kind": "pack",
-    "tile": 232
+    "kind": "sheet",
+    "path": "packs/kenney_tower-defense-top-down/Tilesheet/towerDefense_tilesheet.png",
+    "frame_w": 64,
+    "frame_h": 64,
+    "frames": [
+      182
+    ],
+    "fps": 8.0,
+    "loop": false
   },
   "projectile_sprite": null,
   "sprite_scale": 1.0,

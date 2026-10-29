@@ -4,8 +4,15 @@
   "side": "defender",
   "role": "ranged",
   "sprite": {
-    "kind": "pack",
-    "tile": 229
+    "kind": "sheet",
+    "path": "packs/kenney_tower-defense-top-down/Tilesheet/towerDefense_tilesheet.png",
+    "frame_w": 64,
+    "frame_h": 64,
+    "frames": [
+      203
+    ],
+    "fps": 8.0,
+    "loop": false
   },
   "projectile_sprite": null,
   "sprite_scale": 0.95,
@@ -37,21 +44,33 @@
       "id": "damage",
       "name": "Damage",
       "gains": {
-        "damage": 1.6
+        "damage": 1.6,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
       }
     },
     {
       "id": "range",
       "name": "Range",
       "gains": {
-        "range": 1.12
+        "damage": 1.0,
+        "range": 1.12,
+        "rate": 1.0,
+        "hp": 1.0,
+        "projectiles": 0
       }
     },
     {
       "id": "rapid",
       "name": "Rapid Fire",
       "gains": {
-        "rate": 0.82
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 0.82,
+        "hp": 1.0,
+        "projectiles": 0
       }
     },
     {
@@ -59,6 +78,9 @@
       "name": "Multi Shot",
       "gains": {
         "damage": 0.92,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.0,
         "projectiles": 1
       }
     },
@@ -66,7 +88,11 @@
       "id": "vitality",
       "name": "Vitality",
       "gains": {
-        "hp": 1.25
+        "damage": 1.0,
+        "range": 1.0,
+        "rate": 1.0,
+        "hp": 1.25,
+        "projectiles": 0
       }
     }
   ]

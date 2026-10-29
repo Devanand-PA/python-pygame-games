@@ -4,8 +4,15 @@
   "side": "defender",
   "role": "splash",
   "sprite": {
-    "kind": "pack",
-    "tile": 230
+    "kind": "sheet",
+    "path": "packs/kenney_tower-defense-top-down/Tilesheet/towerDefense_tilesheet.png",
+    "frame_w": 64,
+    "frame_h": 64,
+    "frames": [
+      249
+    ],
+    "fps": 8.0,
+    "loop": false
   },
   "projectile_sprite": null,
   "sprite_scale": 0.95,

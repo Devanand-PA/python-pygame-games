@@ -149,5 +149,12 @@
   "path": [],
   "map": "",
   "order": 2,
-  "script": null
+  "script": {
+    "intro": [],
+    "outro": {
+      "victory": [],
+      "defeat": []
+    },
+    "checkpoints": []
+  }
 }

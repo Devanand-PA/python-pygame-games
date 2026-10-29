@@ -19,8 +19,8 @@
     "sssss.nswCsssCswnssswssssssnlssswsswsssw",
     "wswsw.wwwwwwwwwwwwwwwwwwwwwllssllwwwwwww",
     "wwwws.................................ww",
-    "wwwssswwwwwwwwwwwwwwwwwllllllllllwwss.ww",
-    "wwwsswwwwwwwwwwwwwwwwwwlllslwwlsswwww.ww",
+    "wwwssswwwwwwnwwwwwwwwwwllllllllllwwss.ww",
+    "wwwsswwwwwnwwwwwwwwwwwwlllslwwlsswwww.ww",
     "wwwww.................................ww",
     "wwwww.sswwwwwwwwwwwwwwwlllsssslnslwwwwsw",
     "wnwsw.wwwlsssswsswwwwwwllllllllllllllsss",
@@ -182,5 +182,12 @@
   ],
   "map": "",
   "order": 1,
-  "script": null
+  "script": {
+    "intro": [],
+    "outro": {
+      "victory": [],
+      "defeat": []
+    },
+    "checkpoints": []
+  }
 }
