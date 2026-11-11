@@ -32,7 +32,10 @@
   "levels": [
     "aliens_01",
     "aliens_02",
-    "aliens_03"
+    "aliens_03",
+    "aliens_04",
+    "aliens_05",
+    "aliens_06"
   ],
   "hero": "matriarch"
 }

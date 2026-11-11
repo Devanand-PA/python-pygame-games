@@ -151,6 +151,40 @@ LEVEL_SPECS = [
     dict(level_id="machines_03", race="machines", seed=317,
          axis="v", lanes=[3, 9, 15, 21, 27, 33], bounds=[2, 17, 3, 17, 4, 16],
          jitter=1, start=(0, 18), base=(38, 12), link="orth"),
+
+    # ---- levels 4-6 (three per race): three fresh route shapes so the later
+    # campaign does not repeat the level 1-3 silhouettes.
+    #   shape A  long vertical serpentine -- enemies snake up whole columns
+    #   shape B  tight inward coil       -- per-lane bounds spiral to the centre
+    #   shape C  double-back             -- a few long prongs joined by diagonal
+    #                                      ramps (link="diag" + diag_shift)
+    dict(level_id="woodlanders_04", race="woodlanders", seed=131,
+         axis="v", lanes=[2, 8, 14, 20, 26, 32], bounds=(2, 17), jitter=1,
+         start=(0, 18), base=(37, 18), link="orth"),
+    dict(level_id="woodlanders_05", race="woodlanders", seed=137,
+         axis="h", lanes=[1, 4, 7, 10, 13, 16], bounds=[3, 35, 8, 30, 13, 24], jitter=1,
+         start=(39, 1), base=(24, 18), link="orth"),
+    dict(level_id="woodlanders_06", race="woodlanders", seed=139,
+         axis="h", lanes=[2, 7, 11, 16], bounds=(5, 34), jitter=1,
+         start=(0, 2), base=(36, 19), link="diag", diag_shift=4),
+    dict(level_id="aliens_04", race="aliens", seed=233,
+         axis="v", lanes=[3, 9, 15, 21, 27, 33], bounds=(2, 17), jitter=1,
+         start=(0, 18), base=(37, 1), link="orth"),
+    dict(level_id="aliens_05", race="aliens", seed=239,
+         axis="h", lanes=[1, 4, 7, 10, 13, 16], bounds=[35, 3, 31, 6, 26, 9], jitter=1,
+         start=(0, 1), base=(26, 19), link="orth"),
+    dict(level_id="aliens_06", race="aliens", seed=241,
+         axis="h", lanes=[1, 6, 11, 16], bounds=(4, 34), jitter=1,
+         start=(0, 1), base=(36, 19), link="diag", diag_shift=3),
+    dict(level_id="machines_04", race="machines", seed=323,
+         axis="v", lanes=[3, 9, 15, 21, 27, 33], bounds=(2, 17), jitter=1,
+         start=(0, 18), base=(37, 2), link="orth"),
+    dict(level_id="machines_05", race="machines", seed=329,
+         axis="h", lanes=[1, 5, 9, 13, 17], bounds=[35, 4, 30, 7, 24], jitter=1,
+         start=(0, 1), base=(24, 19), link="orth"),
+    dict(level_id="machines_06", race="machines", seed=331,
+         axis="h", lanes=[1, 7, 12, 16], bounds=(6, 33), jitter=1,
+         start=(0, 1), base=(34, 19), link="diag", diag_shift=3),
 ]
 
 

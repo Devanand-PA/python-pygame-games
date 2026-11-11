@@ -47,6 +47,7 @@ HIDDEN_IMPORTS = [
     "engine.projectiles",
     "engine.stats_panel",
     "engine.units",
+    "engine.worldmap",
     "gui.widgets",
     "menus.campaign_select",
     "menus.career_menu",

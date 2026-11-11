@@ -59,10 +59,32 @@ def main():
     campaign = game.subscenes[-1]
     snap(game, "04_campaign_select")
 
-    # 5. level select
+    # 5. level select (now the world map)
     campaign._launch(campaign.races[0])
     level_sel = game.subscenes[-1]
     snap(game, "05_level_select")
+    wm = level_sel.world
+
+    # 5b. the whole campaign region
+    wm.fit_view()
+    snap(game, "05b_worldmap_fit")
+
+    # 5c. zoomed onto the first marker
+    wm.zoom_by(1.6, wm.pin_screen_pos(wm.pins[0]))
+    game.on_update(0.4)
+    snap(game, "05c_worldmap_zoomed")
+
+    # 5d. a marker's briefing panel
+    pin = wm.pins[0]
+    sx, sy = wm.pin_screen_pos(pin)
+    wm.handle_event(pygame.event.Event(pygame.MOUSEMOTION, pos=(sx, sy),
+                                       rel=(0, 0), buttons=(0, 0, 0)))
+    wm.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                      pos=(sx, sy)))
+    wm.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                      pos=(sx, sy)))
+    snap(game, "05d_worldmap_panel")
+    wm.fit_view()
 
     # 6. game with units + enemies mid-wave
     level_id = level_sel.levels[0]["id"]

@@ -2,7 +2,7 @@
   "id": "machines_02",
   "race": "machines",
   "name": "Rust Flats",
-  "description": "",
+  "description": "A plain of corroded plating and dead crawlers: good buildable ground, if you can hold it.",
   "gold": 250,
   "gold_per_sec": 1.6,
   "lives": 20,

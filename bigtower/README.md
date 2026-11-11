@@ -30,6 +30,7 @@ content/
     units/<unit_id>.json   every unit, defender *and* attacker, one schema
     races/<race_id>.json   a campaign: defender roster, enemy roster, levels
     levels/<level_id>.json grid, economy, available units, enemy pool, waves
+    world/<race_id>.json   the campaign region: name, size, theme, level pins
 ```
 
 A **race** is a campaign (e.g. *Woodlanders*, *The Brood* / aliens, *Iron
@@ -96,6 +97,39 @@ and attackers (`enemy_pool`), then define `waves` (each a list of
 `[unit_id, count, spawn_interval]` groups). The spawn `S` and base `B`
 characters are reserved; ground routes are found automatically by a breadth-first
 search from `S` to `B`, so branching maps work.
+
+## The world map
+
+Choosing a campaign opens its **world map** (`engine/worldmap.py`, served by
+`menus/level_select.py`): the campaign region drawn as a chart of lakes,
+forests, scenery and place names, with every level as a marker on a road that
+follows the race's level order.
+
+- **Pan** by dragging, with WASD / arrow keys, or by clicking the minimap.
+- **Zoom** with the mouse wheel (towards the cursor), the `+` / `-` buttons, or
+  `+` / `-` keys; `F` (or the fit button) zooms out to the whole region.
+- Markers show their state: gold and gently pulsing for the next level, green
+  with a check once cleared, grey with a padlock while locked (clear the level
+  before it first). The road is tinted to match: green behind you, gold at your
+  feet, grey beyond.
+- Click a marker for its briefing (name, position, waves, description); `Play`
+  or `Enter` launches it, `Esc` closes the briefing and then returns to the
+  campaign picker. `Tab` cycles markers, `1`..`9` jump to one.
+
+Where each marker sits is data -- `content/world/<race_id>.json`:
+
+```json
+{"id": "woodlanders", "name": "The Greenwood Vale", "size": [2560, 1440],
+ "theme": "forest",
+ "pins": [{"level": "woodlanders_01", "x": 0.14, "y": 0.80}, ...]}
+```
+
+`x`/`y` are normalised (0..1) positions on the region, `theme` picks one of the
+built-in palettes (`forest`, `desert`, `foundry`) and `size` is the region's
+pixel size. Everything is optional: a level without a pin is laid out
+automatically, and a race without a world file still gets a generated map. The
+world itself is deterministic -- it is painted once from a seed derived from the
+race id, so the same campaign always looks the same.
 
 ## Level designer
 

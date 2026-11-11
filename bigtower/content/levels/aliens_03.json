@@ -2,7 +2,7 @@
   "id": "aliens_03",
   "race": "aliens",
   "name": "Spiral Basin",
-  "description": "",
+  "description": "The rift at the basin's heart hatches in pulses, and the spiral is drawn by what crawled out last time.",
   "gold": 280,
   "gold_per_sec": 2.2,
   "lives": 15,

@@ -2,7 +2,7 @@
   "id": "aliens_02",
   "race": "aliens",
   "name": "The Shallows",
-  "description": "",
+  "description": "Glass dunes over a shallow sea; something under the surface keeps pushing them up.",
   "gold": 250,
   "gold_per_sec": 1.6,
   "lives": 20,

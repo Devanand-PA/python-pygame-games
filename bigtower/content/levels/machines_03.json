@@ -2,7 +2,7 @@
   "id": "machines_03",
   "race": "machines",
   "name": "The Coilworks",
-  "description": "",
+  "description": "The yard's machining floor coils around its own core, and the core is turning again.",
   "gold": 280,
   "gold_per_sec": 2.2,
   "lives": 15,

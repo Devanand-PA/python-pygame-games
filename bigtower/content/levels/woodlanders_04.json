@@ -1,0 +1,238 @@
+{
+  "id": "woodlanders_04",
+  "race": "woodlanders",
+  "name": "Thornwood Pass",
+  "description": "A narrow brush-choked pass where the treeline crowds the road on both sides.",
+  "gold": 320,
+  "gold_per_sec": 2.8,
+  "lives": 20,
+  "grid": [
+    "tgtggggggttttggggtggtttttttgtttttttttttt",
+    "gggttttgttttggrgttgtttttttgggttttttttttt",
+    "tg.......tgttg.......ttttttgtttttgtttttt",
+    "gt.tgttg.ggggt.ggttr.tttgt.......tgttttt",
+    "gg.gtggg.tgttt.tggtg.tgggt.gtttg.gggtttt",
+    "gg.tgggt.tgttt.tgrgt.tttgt.tgggt.tgtrttt",
+    "gr.ttgtt.ggggt.rrggg.ttttt.tgtgt.ttttttt",
+    "rr.tgtgt.tgttt.tgrgt.tgtgt.ggggt.tgggggt",
+    "gr.ggggt.ttggg.gggtt.tgtgt.ggggt.tttgttt",
+    "gg.ggggt.tgttt.tgtgt.tttgt.rgggr.gggtttt",
+    "tt.ggggt.tgtgt.gggtt.tgttg.rgrrr.ggggtgt",
+    "gg.tgttg.tgggr.tgtgt.gggrr.rrrgr.tgggggg",
+    "gg.gtggg.ggggr.tttgt.tgrrr.rgggr.tgtgtgt",
+    "gg.tgttg.gggrr.tgttt.ggggr.rgrgr.ttttttt",
+    "gg.gggtg.ggggt.ggggt.gggrr.gggrr.gggggtg",
+    "tt.tgttt.ggggt.tgttt.rgrgr.rgrgr.tgtgtgt",
+    "gg.tgttt.ttttt.tgtgt.rrrgr.rrrrt.tttttrt",
+    "rg.gggtt.......ttttt.......grttg......tt",
+    "S..tgtgttggtgttgttggtrrgrggggtgggtttrBrt",
+    "rtttttttggggggttggggtrgtttggtgggttgggrtt"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "gun",
+    "scorpion",
+    "thornling",
+    "spitter",
+    "missile",
+    "snakewatch"
+  ],
+  "enemy_pool": [
+    "grunt",
+    "runner",
+    "armored",
+    "jet",
+    "brute",
+    "tank"
+  ],
+  "waves": [
+    [
+      [
+        "grunt",
+        7,
+        1.2
+      ]
+    ],
+    [
+      [
+        "armored",
+        8,
+        1.6
+      ]
+    ],
+    [
+      [
+        "runner",
+        12,
+        0.9
+      ]
+    ],
+    [
+      [
+        "grunt",
+        8,
+        1.2
+      ],
+      [
+        "jet",
+        12,
+        1.0
+      ]
+    ],
+    [
+      [
+        "armored",
+        9,
+        1.6
+      ],
+      [
+        "brute",
+        5,
+        1.7
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ],
+    [
+      [
+        "jet",
+        14,
+        1.0
+      ]
+    ],
+    [
+      [
+        "armored",
+        11,
+        1.6
+      ],
+      [
+        "brute",
+        6,
+        1.7
+      ]
+    ],
+    [
+      [
+        "runner",
+        18,
+        0.8
+      ],
+      [
+        "jet",
+        8,
+        1.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ],
+    [
+      [
+        "jet",
+        16,
+        1.0
+      ],
+      [
+        "brute",
+        4,
+        1.7
+      ]
+    ],
+    [
+      [
+        "armored",
+        13,
+        1.6
+      ],
+      [
+        "brute",
+        8,
+        1.7
+      ]
+    ],
+    [
+      [
+        "runner",
+        20,
+        0.7
+      ],
+      [
+        "tank",
+        2,
+        5.0
+      ]
+    ],
+    [
+      [
+        "armored",
+        14,
+        1.6
+      ],
+      [
+        "brute",
+        6,
+        1.7
+      ],
+      [
+        "jet",
+        12,
+        1.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        3,
+        5.0
+      ],
+      [
+        "brute",
+        6,
+        1.7
+      ],
+      [
+        "jet",
+        10,
+        1.0
+      ]
+    ],
+    [
+      [
+        "tank",
+        4,
+        6.0
+      ],
+      [
+        "brute",
+        8,
+        1.7
+      ],
+      [
+        "jet",
+        16,
+        1.0
+      ]
+    ]
+  ],
+  "path": [],
+  "map": "",
+  "order": 4,
+  "script": {
+    "intro": [],
+    "outro": {
+      "victory": [],
+      "defeat": []
+    },
+    "checkpoints": []
+  }
+}

@@ -2,7 +2,7 @@
   "id": "woodlanders_02",
   "race": "woodlanders",
   "name": "Twin Brooks",
-  "description": "",
+  "description": "Two streams cut the vale in half and the road follows both. Hold the crossings and the horde drowns in between.",
   "gold": 250,
   "gold_per_sec": 1.6,
   "lives": 20,

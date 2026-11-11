@@ -1,0 +1,15 @@
+{
+  "id": "woodlanders",
+  "name": "The Greenwood Vale",
+  "description": "A wooded basin cut through with old game trails. Hold six groves and hollows as the road climbs from the low meadows up to the elder tree line.",
+  "size": [2560, 1440],
+  "theme": "forest",
+  "pins": [
+    {"level": "woodlanders_01", "x": 0.16, "y": 0.80},
+    {"level": "woodlanders_02", "x": 0.30, "y": 0.64},
+    {"level": "woodlanders_03", "x": 0.44, "y": 0.76},
+    {"level": "woodlanders_04", "x": 0.52, "y": 0.50},
+    {"level": "woodlanders_05", "x": 0.68, "y": 0.46},
+    {"level": "woodlanders_06", "x": 0.82, "y": 0.24}
+  ]
+}

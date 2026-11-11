@@ -27,7 +27,7 @@ def check(name, cond, extra=""):
 
 
 def key_event(key, unicode=""):
-    return pygame.event.Event(pygame.KEYDOWN, key=key, unicode=unicode)
+    return pygame.event.Event(pygame.KEYDOWN, key=key, unicode=unicode, mod=0)
 
 
 def fast_forward(scene, seconds, dt=1 / 60):
@@ -247,6 +247,129 @@ def main():
     check("level select opens for a race",
           level_sel.__module__ == "menus.level_select"
           and len(level_sel.levels) >= 1)
+
+    # ------------------------------------------- world map: pan / zoom / pins
+    world = level_sel.world
+    check("world map has a pin per level",
+          [p.level_id for p in world.pins] == [l["id"] for l in level_sel.levels])
+    check("world map starts with only the first level open",
+          world.pins[0].state == "unlocked"
+          and all(p.state == "locked" for p in world.pins[1:]))
+    check("world map fits the region on screen",
+          abs(world.zoom - world._fit_zoom()) < 1e-6)
+    home_x, home_y = world.x, world.y
+    # keyboard zoom in, then pan by dragging the map
+    world.handle_event(key_event(pygame.K_KP_PLUS))
+    check("+ zooms the world map in", world.zoom > world._fit_zoom())
+    zoomed = world.zoom
+    world.handle_event(pygame.event.Event(
+        pygame.MOUSEBUTTONDOWN, button=1, pos=(640, 360)))
+    for step in range(6):
+        world.handle_event(pygame.event.Event(
+            pygame.MOUSEMOTION, pos=(640 - step * 12, 360 - step * 8),
+            rel=(-12, -8), buttons=(1, 0, 0)))
+    world.handle_event(pygame.event.Event(
+        pygame.MOUSEBUTTONUP, button=1, pos=(580, 312)))
+    check("dragging pans the world map", (world.x, world.y) != (home_x, home_y),
+          f"offset {world.x:.0f},{world.y:.0f}")
+    check("the pan stays inside the region",
+          0 <= world.x <= world.world_w and 0 <= world.y <= world.world_h)
+    world.handle_event(key_event(pygame.K_f))
+    check("F fits the whole region again",
+          abs(world.zoom - world._fit_zoom()) < 1e-6
+          and (world.x, world.y) == (home_x, home_y))
+    # clicking a pin opens its briefing panel
+    pin = world.pins[0]
+    px, py = world.pin_screen_pos(pin)
+    world.handle_event(pygame.event.Event(pygame.MOUSEMOTION, pos=(px, py),
+                                          rel=(0, 0), buttons=(0, 0, 0)))
+    world.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                          pos=(px, py)))
+    world.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                          pos=(px, py)))
+    check("clicking a marker opens its panel",
+          world.selected is pin and pin.state == "unlocked")
+    world.handle_event(key_event(pygame.K_ESCAPE))
+    check(" Escape closes the briefing before going back",
+          world.selected is None and level_sel in game.subscenes)
+    # a locked pin can be inspected but not launched
+    locked = world.pins[-1]
+    lx, ly = world.pin_screen_pos(locked)
+    world.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                          pos=(lx, ly)))
+    world.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                          pos=(lx, ly)))
+    before = game.scene
+    world.handle_event(key_event(pygame.K_RETURN))
+    check("a locked level cannot be launched",
+          locked.state == "locked" and game.scene is before)
+    world.selected = None
+    # the map draws without touching a level
+    game.on_draw()
+    check("world map draws", True)
+
+    # progress in the saves is what unlocks pins: clear level 1, reopen the map
+    from core import savestate
+    savestate.record_level_completed(game.user or "Tester",
+                                     level_sel.levels[0]["id"], 0,
+                                     [l["id"] for l in level_sel.levels])
+    game.subscenes.remove(level_sel)
+    game.subscenes.append(type(level_sel)(game, race))
+    world2 = game.subscenes[-1].world
+    check("a cleared level turns its pin green and opens the next",
+          world2.pins[0].state == "cleared"
+          and world2.pins[1].state == "unlocked"
+          and all(p.state == "locked" for p in world2.pins[2:]),
+          " / ".join(p.state for p in world2.pins))
+    game.subscenes[-1]._launch(world2.pins[1].level_id)
+    check("an unlocked later level launches from the map",
+          game.scene.__module__ == "engine.game_scene"
+          and game.scene.level_id == level_sel.levels[1]["id"])
+    game.subscenes.clear()
+
+    # ------------------------------------- world map controls: buttons/minimap
+    from menus.level_select import Scene as LevelSelectScene
+    game.subscenes.append(LevelSelectScene(game, race))
+    world3 = game.subscenes[-1].world
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                           pos=world3.zoom_in_rect.center))
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                           pos=world3.zoom_in_rect.center))
+    check("the + button zooms in", world3.zoom > world3._fit_zoom())
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                           pos=world3.fit_rect.center))
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                           pos=world3.fit_rect.center))
+    check("the fit button restores the whole region",
+          abs(world3.zoom - world3._fit_zoom()) < 1e-6)
+    # zoom is clamped: the region can never be zoomed out past a full fit
+    for _ in range(12):
+        world3.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1,
+                                               pos=(640, 360)))
+    check("zooming out stops at the whole-region fit",
+          abs(world3.zoom - world3._fit_zoom()) < 1e-6)
+    # the minimap jumps the view to where it is clicked
+    world3.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=3,
+                                           pos=(640, 360)))
+    zoomed_in = world3.zoom
+    box = world3.minimap_rect
+    before = (world3._tx, world3._ty)
+    corner = (box.right - 8, box.top + 8)      # the region's top-right corner
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                           pos=corner))
+    check("clicking the minimap moves the view",
+          zoomed_in > world3._fit_zoom() and (world3._tx, world3._ty) != before,
+          f"{before} -> {(world3._tx, world3._ty)}")
+    # Tab cycles markers; Back returns to the campaign picker
+    world3.handle_event(key_event(pygame.K_TAB))
+    check("Tab selects a marker", world3.selected is not None)
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1,
+                                           pos=world3.back_rect.center))
+    world3.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1,
+                                           pos=world3.back_rect.center))
+    check("Back returns to the campaign picker",
+          game.subscenes[-1].__module__ == "menus.campaign_select")
+    game.subscenes.clear()
 
     # ---------------------------------------------------------------- battle
     level_id = level_sel.levels[0]["id"]
@@ -816,6 +939,30 @@ def main():
           level_id in (stats.get("Levels Completed") or []), str(stats))
     check("kills recorded", stats.get("Kills", 0) == scene.session_kills,
           f"{stats.get('Kills')} vs {scene.session_kills}")
+
+    # --------------------------------------- every shipped level is playable
+    playable, broken = 0, []
+    for race in content.sorted_races():
+        for lv in content.race_levels(race):
+            try:
+                from engine.game_scene import GameScene
+                trial = GameScene(game, lv["id"])
+                ok = (trial.shop_units and len(trial.level.waypoints) > 5
+                      and trial.level.spawn_cell and trial.level.base_cell)
+                trial.first_wave_pending = False
+                trial.start_wave()
+                fast_forward(trial, 8)
+                ok = ok and bool(trial.attackers or trial.spawn_queue)
+                if ok:
+                    playable += 1
+                else:
+                    broken.append(lv["id"])
+            except Exception as exc:            # noqa: BLE001 - reported below
+                broken.append(f"{lv['id']}: {exc}")
+    total = sum(len(content.race_levels(r)) for r in content.races.values())
+    check("every level loads, stocks a shop and spawns its first wave",
+          not broken and playable == total,
+          f"{playable}/{total} playable; broken={broken}")
 
     # ------------------------------------------------------------ delete user
     from menus.user_selection import Scene as UserScene

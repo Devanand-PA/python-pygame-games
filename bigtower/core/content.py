@@ -686,6 +686,7 @@ class ContentDB:
         self.units = {}
         self.races = {}
         self.levels = {}
+        self.worlds = {}
         self.spritesheets = []
         self.errors = []
         self.reload()
@@ -705,8 +706,27 @@ class ContentDB:
         self._load_units()
         self._load_races()
         self._load_levels()
+        self._load_worlds()
         self._load_spritesheets()
         return self
+
+    def _load_worlds(self):
+        """Per-race overworld maps (see :mod:`engine.worldmap`).
+
+        ``content/world/<race_id>.json`` describes the campaign region the
+        player pans and zooms over: its name, pixel size, theme palette and
+        where each level's pin sits (normalised 0..1).  Everything is
+        optional -- a race with no file gets an auto-generated layout, and a
+        partial file simply falls back theme by theme.
+        """
+        self.worlds = {}
+        folder = self.root / "world"
+        for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+            data = self._load_json(path)
+            if not isinstance(data, dict):
+                continue
+            data.setdefault("id", path.stem)
+            self.worlds[str(data["id"])] = data
 
     def _load_spritesheets(self):
         """The designer's spritesheet registry (the game itself ignores it).
@@ -827,6 +847,10 @@ class ContentDB:
 
     def race(self, race_id):
         return self.races.get(race_id)
+
+    def world(self, race_id):
+        """The raw overworld spec for a race, or None when it has no file."""
+        return self.worlds.get(race_id)
 
     def level(self, level_id):
         return self.levels.get(level_id)

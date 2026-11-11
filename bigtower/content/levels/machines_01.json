@@ -2,7 +2,7 @@
   "id": "machines_01",
   "race": "machines",
   "name": "Cold Foundry",
-  "description": "",
+  "description": "The Legion's smallest yard, idling and half-buried. It woke up when you did.",
   "gold": 220,
   "gold_per_sec": 1.0,
   "lives": 20,

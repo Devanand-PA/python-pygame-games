@@ -1,0 +1,238 @@
+{
+  "id": "aliens_04",
+  "race": "aliens",
+  "name": "Crater Flats",
+  "description": "A flattened impact basin of ash and glass where the Brood feeds.",
+  "gold": 320,
+  "gold_per_sec": 2.8,
+  "lives": 20,
+  "grid": [
+    "lllllsllswwwwwwwswnwllllllllllslsllwwlll",
+    "llllsssssnwwwswssssslllllllllssssswwlBll",
+    "wwsllsllslwwwwnwswswllllllllllslswwsw.ws",
+    "wsw.......wwwww.......lslll.......www.ww",
+    "sss.sllls.wswsw.wswss.ssnll.swwws.wsw.ww",
+    "wsw.wwsls.ssssw.swssl.ssssl.wswsw.ssw.ww",
+    "sss.ssssl.ssssw.wsllw.nsssl.ssssw.ssw.sw",
+    "www.wsssl.wswww.ssssl.lslsl.wswsw.ssw.ln",
+    "wsw.lsssw.wswsw.wslll.lllll.wwsws.wsw.wl",
+    "sss.lslsw.wwwww.wwsss.lllsw.lslls.sww.ws",
+    "wsl.lllll.ssssw.wswsw.lsssl.slssw.ssw.ww",
+    "lsl.lssss.wswww.sssww.ssssl.lllls.ssw.ws",
+    "sss.lslsl.sssww.wswnw.wsssl.lslls.ssw.ww",
+    "lsl.lsssl.wswsw.wswss.wwwwl.ssssl.wsw.ws",
+    "lll.lllls.swsss.wswsw.wswwl.ssssl.www.ww",
+    "lsl.wswss.swwws.wswww.sswss.lslsl.ssw.wl",
+    "sns.wswws.......wwwww.......lllll.sws.ww",
+    "lls.sssswwsssswwwwwwswswwwwwsnlll.....nw",
+    "S...wswwssssssswwwwwwsssswswsssllwwswsss",
+    "llwwswwwsssssswwwwwwwwswwwwwwssswwssswss"
+  ],
+  "terrain_tint": null,
+  "available_units": [
+    "bulwark",
+    "flak",
+    "gun",
+    "missile",
+    "spitter",
+    "tesla"
+  ],
+  "enemy_pool": [
+    "bomber",
+    "brute",
+    "swarm",
+    "jet",
+    "spitter_foe",
+    "warlord"
+  ],
+  "waves": [
+    [
+      [
+        "swarm",
+        14,
+        0.6
+      ]
+    ],
+    [
+      [
+        "brute",
+        4,
+        1.7
+      ]
+    ],
+    [
+      [
+        "spitter_foe",
+        8,
+        1.4
+      ]
+    ],
+    [
+      [
+        "swarm",
+        12,
+        0.6
+      ],
+      [
+        "jet",
+        12,
+        1.0
+      ]
+    ],
+    [
+      [
+        "bomber",
+        9,
+        1.3
+      ],
+      [
+        "brute",
+        4,
+        1.7
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "swarm",
+        18,
+        0.5
+      ],
+      [
+        "jet",
+        14,
+        1.0
+      ]
+    ],
+    [
+      [
+        "bomber",
+        10,
+        1.3
+      ],
+      [
+        "brute",
+        6,
+        1.7
+      ]
+    ],
+    [
+      [
+        "spitter_foe",
+        12,
+        1.4
+      ],
+      [
+        "jet",
+        10,
+        1.0
+      ]
+    ],
+    [
+      [
+        "brute",
+        8,
+        1.7
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ]
+    ],
+    [
+      [
+        "swarm",
+        22,
+        0.5
+      ],
+      [
+        "bomber",
+        12,
+        1.3
+      ],
+      [
+        "jet",
+        12,
+        1.0
+      ]
+    ],
+    [
+      [
+        "brute",
+        9,
+        1.7
+      ],
+      [
+        "spitter_foe",
+        12,
+        1.4
+      ]
+    ],
+    [
+      [
+        "warlord",
+        2,
+        8.0
+      ],
+      [
+        "jet",
+        16,
+        1.0
+      ]
+    ],
+    [
+      [
+        "brute",
+        10,
+        1.7
+      ],
+      [
+        "bomber",
+        12,
+        1.3
+      ],
+      [
+        "swarm",
+        16,
+        0.6
+      ]
+    ],
+    [
+      [
+        "warlord",
+        3,
+        8.0
+      ],
+      [
+        "brute",
+        8,
+        1.7
+      ],
+      [
+        "jet",
+        18,
+        1.0
+      ]
+    ]
+  ],
+  "path": [],
+  "map": "",
+  "order": 4,
+  "script": {
+    "intro": [],
+    "outro": {
+      "victory": [],
+      "defeat": []
+    },
+    "checkpoints": []
+  }
+}

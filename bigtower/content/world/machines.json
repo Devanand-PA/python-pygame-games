@@ -1,0 +1,15 @@
+{
+  "id": "machines",
+  "name": "The Slag Frontier",
+  "description": "The Iron Legion's foundry sprawl of slag deltas, engine halls and the hot reactor core. Hold six yards and approaches before the machines reach the core gate.",
+  "size": [2560, 1440],
+  "theme": "foundry",
+  "pins": [
+    {"level": "machines_01", "x": 0.14, "y": 0.78},
+    {"level": "machines_02", "x": 0.32, "y": 0.62},
+    {"level": "machines_03", "x": 0.20, "y": 0.48},
+    {"level": "machines_04", "x": 0.44, "y": 0.68},
+    {"level": "machines_05", "x": 0.60, "y": 0.46},
+    {"level": "machines_06", "x": 0.84, "y": 0.24}
+  ]
+}

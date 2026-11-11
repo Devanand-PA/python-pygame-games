@@ -1,0 +1,15 @@
+{
+  "id": "aliens",
+  "name": "The Hissing Reach",
+  "description": "The Brood's desert front of ash flats, glass dunes and a rift it hatches from. Six chokepoints stand between the crater and your gate.",
+  "size": [2560, 1440],
+  "theme": "desert",
+  "pins": [
+    {"level": "aliens_01", "x": 0.18, "y": 0.82},
+    {"level": "aliens_02", "x": 0.34, "y": 0.70},
+    {"level": "aliens_03", "x": 0.22, "y": 0.54},
+    {"level": "aliens_04", "x": 0.46, "y": 0.58},
+    {"level": "aliens_05", "x": 0.62, "y": 0.40},
+    {"level": "aliens_06", "x": 0.82, "y": 0.22}
+  ]
+}

@@ -32,7 +32,10 @@
   "levels": [
     "machines_01",
     "machines_02",
-    "machines_03"
+    "machines_03",
+    "machines_04",
+    "machines_05",
+    "machines_06"
   ],
   "hero": "colossus"
 }

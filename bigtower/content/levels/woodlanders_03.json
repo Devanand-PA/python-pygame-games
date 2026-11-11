@@ -2,7 +2,7 @@
   "id": "woodlanders_03",
   "race": "woodlanders",
   "name": "Serpent's Coil",
-  "description": "",
+  "description": "The old game trail coils back on itself through the deep wood. Whatever drives them, it means to reach the elder tree.",
   "gold": 280,
   "gold_per_sec": 2.2,
   "lives": 15,
